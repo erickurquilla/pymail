@@ -1,0 +1,12 @@
+id = "mentorias-cierre-2026"
+subject = "Mentorías InspiraSTEM 2026: cierre de mentorías y registro de reuniones [Acción requerida]"
+sheet_id = "kdjvndkjnfldjflsknlvnlvkmlkdmdc"
+sheet_name = "bodega"
+email_column = "Email"
+delay_seconds = 2
+cc = []
+
+[columns]
+name = "Nombre"
+position = "Carrera"
+afiliacion = "Institucion"

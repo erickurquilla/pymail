@@ -1,0 +1,27 @@
+[project]
+name = "pymail"
+version = "0.1.0"
+description = "Envío de correos por campañas, con vista previa y registro de envíos."
+requires-python = ">=3.11"
+dependencies = [
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+pymail = "pymail.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

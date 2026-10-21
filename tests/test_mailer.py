@@ -1,0 +1,170 @@
+"""Pruebas sin red y sin SMTP real."""
+
+from dataclasses import replace
+from pathlib import Path
+
+from pymail.campaign import load_campaign
+from pymail.cli import main
+from pymail.ledger import Ledger
+from pymail.recipients import Recipient
+from pymail.render import UnfilledPlaceholder, render_message
+from pymail.smtp_sender import deliver
+
+import pytest
+
+
+CAMPAIGN = Path("campaigns/mentorias-cierre-2026")
+
+SAMPLE_CSV = """\
+Email,Nombre,Carrera,Institucion
+ana@example.com,Ana,Física,UES
+ana@example.com,Ana Otra,Química,UCA
+bad-email,Beto,Bio,UES
+,Sin correo,Mate,UES
+"""
+
+
+class FakeSMTP:
+    def __init__(self):
+        self.sent = []
+        self.logged_in = None
+
+    def ehlo(self):
+        return None
+
+    def starttls(self):
+        return None
+
+    def login(self, user, password):
+        self.logged_in = (user, password)
+
+    def send_message(self, message):
+        self.sent.append(message)
+
+    def quit(self):
+        return None
+
+
+def _csv(tmp_path: Path) -> Path:
+    path = tmp_path / "people.csv"
+    path.write_text(SAMPLE_CSV, encoding="utf-8")
+    return path
+
+
+def test_header_omitted_when_empty():
+    campaign = load_campaign(CAMPAIGN)
+    html, text = render_message(
+        campaign, {"name": "", "position": " ", "afiliacion": None}
+    )
+    assert "<em>" not in html
+    assert "$header_block" not in html
+    assert "$header_block" not in text
+    assert "https://forms.gle/zLxBg2WwMgKRZ7VN8" in html
+    assert "1Bo5z1TJRs-B7iQlhecSqCaBz3t2ERulM" in html
+
+    html, text = render_message(
+        campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
+    )
+    assert "<em>Ana<br>" in html
+    assert "Ana\nFísica\nUES" in text
+
+
+def test_unfilled_placeholder_refused():
+    campaign = load_campaign(CAMPAIGN)
+    broken = replace(
+        campaign,
+        body_html="Hola $nombre\n$header_block",
+        body_txt="Hola $nombre\n$header_block",
+    )
+    with pytest.raises(UnfilledPlaceholder):
+        render_message(broken, {"name": "Ana", "position": "", "afiliacion": ""})
+
+
+def test_second_send_is_skipped(tmp_path):
+    campaign = replace(load_campaign(CAMPAIGN), delay_seconds=0)
+    ledger = Ledger(tmp_path / "sends.db")
+    recipients = [
+        Recipient(
+            "ana@example.com",
+            {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        )
+    ]
+    opened: list[FakeSMTP] = []
+
+    def factory():
+        smtp = FakeSMTP()
+        opened.append(smtp)
+        return smtp
+
+    deliver(
+        campaign,
+        recipients,
+        ledger,
+        "from@example.com",
+        "secret",
+        smtp_factory=factory,
+        sleeper=lambda _seconds: None,
+    )
+    deliver(
+        campaign,
+        recipients,
+        ledger,
+        "from@example.com",
+        "secret",
+        smtp_factory=factory,
+        sleeper=lambda _seconds: None,
+    )
+
+    assert len(opened) == 1
+    assert len(opened[0].sent) == 1
+    assert opened[0].sent[0]["To"] == "ana@example.com"
+    assert ledger.already_sent(campaign.id, "ana@example.com")
+    ledger.close()
+
+
+def test_send_without_env_does_not_send(monkeypatch, tmp_path):
+    monkeypatch.setattr("pymail.cli.load_environment", lambda: None)
+    monkeypatch.delenv("EMAIL_ADDRESS", raising=False)
+    monkeypatch.delenv("EMAIL_PASSWORD", raising=False)
+    calls = []
+    monkeypatch.setattr(
+        "pymail.cli.deliver",
+        lambda *args, **kwargs: calls.append("deliver"),
+    )
+
+    code = main(
+        [
+            "send",
+            str(CAMPAIGN),
+            "--csv",
+            str(_csv(tmp_path)),
+            "--ledger",
+            str(tmp_path / "sends.db"),
+        ]
+    )
+
+    assert code == 1
+    assert calls == []
+
+
+def test_preview_sends_nothing(monkeypatch, tmp_path, capsys):
+    def open_smtp(*args, **kwargs):
+        raise AssertionError("preview abrió SMTP")
+
+    def fail_deliver(*args, **kwargs):
+        raise AssertionError("preview envió")
+
+    monkeypatch.setattr("pymail.smtp_sender.smtplib.SMTP", open_smtp)
+    monkeypatch.setattr("pymail.cli.deliver", fail_deliver)
+
+    code = main(["preview", str(CAMPAIGN), "--csv", str(_csv(tmp_path))])
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert "Destinatarios válidos: 1" in captured.out
+    assert "Duplicados: 1" in captured.out
+    assert "ana@example.com" in captured.out
+    assert "Inválidos: 1" in captured.out
+    assert "bad-email" in captured.out
+    assert "Muestra para ana@example.com" in captured.out
+    assert "https://forms.gle/zLxBg2WwMgKRZ7VN8" in captured.out
