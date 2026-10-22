@@ -44,11 +44,11 @@ Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetid
 
 ## Probar con un solo correo
 
-En `.env` ya tienen que estar el Gmail y la contraseña de aplicación. Este comando manda una sola carta a la dirección que escribas, usando los datos de la primera fila que todavía no se ha enviado:
+En `.env` ya tienen que estar el Gmail y la contraseña de aplicación. Este comando manda una sola carta a la dirección que escribas, usando los datos de la primera fila de la hoja:
 
     .venv/bin/pymail send campaigns/mentorias-cierre-2026 --limit 1 --to tu@gmail.com
 
-Ese envío de prueba no copia las direcciones de `cc` y no se escribe en `sends.db`, así que puedes repetirlo y la lista real sigue pendiente. Revisa que haya llegado bien antes de mandar el resto.
+Ese envío de prueba no copia las direcciones de `cc` y no se escribe en `sends.db`, así que puedes repetirlo y la lista real sigue pendiente. También se envía cuando toda la lista ya fue mandada. Revisa que haya llegado bien antes de mandar el resto.
 
 ## Enviar la lista
 

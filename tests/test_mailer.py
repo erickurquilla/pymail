@@ -133,6 +133,42 @@ def test_to_address_excludes_cc(tmp_path):
     ledger.close()
 
 
+def test_to_address_sends_when_everyone_is_recorded(tmp_path):
+    campaign = replace(load_campaign(CAMPAIGN), delay_seconds=0)
+    ledger = Ledger(tmp_path / "sends.db")
+    ledger.record(campaign.id, "ana@example.com", "sent")
+    recipients = [
+        Recipient(
+            "ana@example.com",
+            {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        )
+    ]
+    opened: list[FakeSMTP] = []
+
+    def factory():
+        smtp = FakeSMTP()
+        opened.append(smtp)
+        return smtp
+
+    deliver(
+        campaign,
+        recipients,
+        ledger,
+        "from@example.com",
+        "secret",
+        to_address="erickurquilla1999@gmail.com",
+        smtp_factory=factory,
+        sleeper=lambda _seconds: None,
+    )
+
+    assert len(opened) == 1
+    assert len(opened[0].sent) == 1
+    assert opened[0].sent[0]["To"] == "erickurquilla1999@gmail.com"
+    assert ledger.already_sent(campaign.id, "ana@example.com")
+    assert not ledger.already_sent(campaign.id, "erickurquilla1999@gmail.com")
+    ledger.close()
+
+
 def test_second_send_is_skipped(tmp_path):
     campaign = replace(load_campaign(CAMPAIGN), delay_seconds=0)
     ledger = Ledger(tmp_path / "sends.db")

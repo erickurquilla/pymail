@@ -87,16 +87,17 @@ def deliver(
 ) -> None:
     """Render pending rows, then send them on one SMTP session.
 
-    ``to_address`` replaces the recipient. The letter still uses the first
-    pending row. The campaign Cc list is left off, and nothing is written to
-    the ledger. Rendering happens before any connection, so an unfilled
-    placeholder never opens SMTP.
+    ``to_address`` replaces the recipient. The letter uses the first row on
+    the sheet, even when that person was already sent. The campaign Cc list
+    is left off, and nothing is written to the ledger. Rendering happens
+    before any connection, so an unfilled placeholder never opens SMTP.
     """
-    pending = select_pending(campaign, recipients, ledger, limit=limit)
     if to_address:
-        pending = pending[:1]
+        chosen = recipients[:1]
+    else:
+        chosen = select_pending(campaign, recipients, ledger, limit=limit)
     outbound = [
-        build_outbound(campaign, recipient, to_address) for recipient in pending
+        build_outbound(campaign, recipient, to_address) for recipient in chosen
     ]
     send_messages(
         campaign,
