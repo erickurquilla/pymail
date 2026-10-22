@@ -2,7 +2,7 @@
 
 Programa para enviar una carta a cada persona de una hoja de Google. Cada carta es una carpeta dentro de `campaigns/`. El programa no guarda la contraseña de Gmail.
 
-La primera campaña es el cierre de mentorías InspiraSTEM 2026: `campaigns/mentorias-cierre-2026`.
+La campaña de ejemplo es `campaigns/example`.
 
 ## Qué necesitas
 
@@ -34,11 +34,11 @@ Abre `.env` y completa las dos líneas:
 
 Ese archivo no se sube a GitHub. No lo compartas.
 
-En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/mentorias-cierre-2026/campaign.toml`. Hoy la pestaña se llama `bodega` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`.
+En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/example/campaign.toml`. En el ejemplo la pestaña se llama `Sheet1` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`.
 
 ## Ver la carta sin enviarla
 
-    .venv/bin/pymail preview campaigns/mentorias-cierre-2026
+    .venv/bin/pymail preview campaigns/example
 
 Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetidos, los que no parecen un email, las primeras cinco personas con su correo, nombre, carrera e institución, y una carta de muestra.
 
@@ -46,23 +46,23 @@ Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetid
 
 En `.env` ya tienen que estar el Gmail y la contraseña de aplicación. Este comando manda una sola carta a la dirección que escribas, usando los datos de la primera fila de la hoja:
 
-    .venv/bin/pymail send campaigns/mentorias-cierre-2026 --limit 1 --to tu@gmail.com
+    .venv/bin/pymail send campaigns/example --limit 1 --to tu@gmail.com
 
 Ese envío de prueba no copia las direcciones de `cc` y no se escribe en `sends.db`, así que puedes repetirlo y la lista real sigue pendiente. También se envía cuando toda la lista ya fue mandada. Revisa que haya llegado bien antes de mandar el resto.
 
 ## Enviar la lista
 
-    .venv/bin/pymail send campaigns/mentorias-cierre-2026
+    .venv/bin/pymail send campaigns/example
 
 Entre un correo y el siguiente el programa espera 2 segundos. Si se corta a la mitad, vuelve a ejecutar el mismo comando: no repite los que ya se enviaron. El registro queda en `sends.db` en esta carpeta. Ese archivo tampoco se sube a GitHub.
 
 En la terminal, cada persona se ve así:
 
-    Sending to Ana at ana@example.com
-    Sent to Ana at ana@example.com
+    Sending to Example at example@example.com
+    Sent to Example at example@example.com
 
 ## Otra campaña
 
-Copia la carpeta `campaigns/mentorias-cierre-2026`, cambia el `id`, el asunto, la hoja y los dos archivos `body.html` y `body.txt`. En el HTML y en el texto, `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece.
+Copia la carpeta `campaigns/example`, cambia el `id`, el asunto, la hoja y los dos archivos `body.html` y `body.txt`. En el HTML y en el texto, `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece.
 
 Para que otras personas reciban copia, pon el nombre de esa columna de la hoja en `cc_columns`. Cada fila copia solo las direcciones de su propia celda. Si no quieres copias, déjalo así: `cc_columns = []`.

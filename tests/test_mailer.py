@@ -13,7 +13,7 @@ from pymail.smtp_sender import deliver
 import pytest
 
 
-CAMPAIGN = Path("campaigns/mentorias-cierre-2026")
+CAMPAIGN = Path("campaigns/example")
 
 SAMPLE_CSV = """\
 Email,Nombre,Carrera,Institucion
@@ -59,8 +59,7 @@ def test_header_omitted_when_empty():
     assert "<em>" not in html
     assert "$header_block" not in html
     assert "$header_block" not in text
-    assert "https://forms.gle/zLxBg2WwMgKRZ7VN8" in html
-    assert "1Bo5z1TJRs-B7iQlhecSqCaBz3t2ERulM" in html
+    assert "https://example.com" in html
 
     html, text = render_message(
         campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
@@ -306,4 +305,4 @@ def test_preview_sends_nothing(monkeypatch, tmp_path, capsys):
     assert "Primeros 5:" in captured.out
     assert "1. ana@example.com | name: Ana | position: Física | afiliacion: UES" in captured.out
     assert "Muestra para ana@example.com" in captured.out
-    assert "https://forms.gle/zLxBg2WwMgKRZ7VN8" in captured.out
+    assert "https://example.com" in captured.out
