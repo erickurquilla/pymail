@@ -87,10 +87,10 @@ def deliver(
 ) -> None:
     """Render pending rows, then send them on one SMTP session.
 
-    ``to_address`` replaces the recipient and records that address. The letter
-    still uses the first pending row, and the campaign Cc list is left off.
-    Rendering happens before any connection, so an unfilled placeholder never
-    opens SMTP.
+    ``to_address`` replaces the recipient. The letter still uses the first
+    pending row. The campaign Cc list is left off, and nothing is written to
+    the ledger. Rendering happens before any connection, so an unfilled
+    placeholder never opens SMTP.
     """
     pending = select_pending(campaign, recipients, ledger, limit=limit)
     if to_address:
@@ -107,6 +107,7 @@ def deliver(
         smtp_factory=smtp_factory,
         sleeper=sleeper,
         include_cc=to_address is None,
+        record=to_address is None,
     )
 
 
@@ -119,6 +120,7 @@ def send_messages(
     smtp_factory=None,
     sleeper=time.sleep,
     include_cc: bool = True,
+    record: bool = True,
 ) -> None:
     if not outbound:
         print("No hay correos pendientes. Los ya enviados están en el registro.")
@@ -132,7 +134,7 @@ def send_messages(
         smtp.ehlo()
         smtp.login(address, password)
         for index, item in enumerate(outbound):
-            _send_one(smtp, campaign, item, ledger, address, include_cc)
+            _send_one(smtp, campaign, item, ledger, address, include_cc, record)
             if index < len(outbound) - 1 and campaign.delay_seconds:
                 sleeper(campaign.delay_seconds)
     finally:
@@ -149,17 +151,20 @@ def _send_one(
     ledger: Ledger,
     from_address: str,
     include_cc: bool,
+    record: bool,
 ) -> None:
     print(f"Sending to {_display(item)}")
     last_error: Exception | None = None
     for _attempt in range(ATTEMPTS):
         try:
             smtp.send_message(_message(campaign, item, from_address, include_cc))
-            ledger.record(campaign.id, item.email, "sent")
+            if record:
+                ledger.record(campaign.id, item.email, "sent")
             print(f"Sent to {_display(item)}")
             return
         except Exception as exc:
             last_error = exc
     error = str(last_error) if last_error else "error desconocido"
-    ledger.record(campaign.id, item.email, "error", error=error)
+    if record:
+        ledger.record(campaign.id, item.email, "error", error=error)
     print(f"Error al enviar a {_display(item)}: {error}")

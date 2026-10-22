@@ -110,6 +110,12 @@ def test_to_address_excludes_cc(tmp_path):
         smtp_factory=factory,
         sleeper=lambda _seconds: None,
     )
+    test_message = opened[0].sent[0]
+    assert test_message["To"] == "erickurq@gmail.com"
+    assert test_message["Cc"] is None
+    assert not ledger.already_sent(campaign.id, "erickurq@gmail.com")
+    assert not ledger.already_sent(campaign.id, "ana@example.com")
+
     deliver(
         campaign,
         recipients,
@@ -120,12 +126,10 @@ def test_to_address_excludes_cc(tmp_path):
         sleeper=lambda _seconds: None,
     )
 
-    test_message = opened[0].sent[0]
     normal_message = opened[1].sent[0]
-    assert test_message["To"] == "erickurq@gmail.com"
-    assert test_message["Cc"] is None
     assert normal_message["To"] == "ana@example.com"
     assert normal_message["Cc"] == "copia@example.com"
+    assert ledger.already_sent(campaign.id, "ana@example.com")
     ledger.close()
 
 
