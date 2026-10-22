@@ -40,7 +40,7 @@ En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nom
 
     .venv/bin/pymail preview campaigns/mentorias-cierre-2026
 
-Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetidos, los que no parecen un email, y una carta de muestra.
+Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetidos, los que no parecen un email, las primeras cinco personas con su correo, nombre, carrera e institución, y una carta de muestra.
 
 ## Probar con un solo correo
 

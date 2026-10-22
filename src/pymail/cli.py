@@ -1,4 +1,5 @@
 """Vista previa y envío. La vista previa es el comando por defecto del programa."""
+"""Vista previa y envío. La vista previa es el comando por defecto del programa."""
 
 from pathlib import Path
 import argparse
@@ -68,6 +69,23 @@ def credentials() -> tuple[str, str] | None:
     return address, password
 
 
+PREVIEW_ROWS = 5
+
+
+def print_preview_rows(campaign, recipients) -> None:
+    shown = recipients[:PREVIEW_ROWS]
+    print()
+    print(f"Primeros {PREVIEW_ROWS}:")
+    for index, recipient in enumerate(shown, start=1):
+        fields = " | ".join(
+            f"{key}: {recipient.fields.get(key, '')}" for key in campaign.columns
+        )
+        line = f"  {index}. {recipient.email}"
+        if fields:
+            line = f"{line} | {fields}"
+        print(line)
+
+
 def preview(campaign, report) -> int:
     print(f"Campaña: {campaign.id}")
     print(f"Destinatarios válidos: {len(report.recipients)}")
@@ -82,6 +100,7 @@ def preview(campaign, report) -> int:
         print("No hay una muestra: ningún correo válido.")
         return 0
 
+    print_preview_rows(campaign, report.recipients)
     sample = report.recipients[0]
     try:
         html, text = render_message(campaign, sample.fields)

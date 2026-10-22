@@ -166,5 +166,7 @@ def test_preview_sends_nothing(monkeypatch, tmp_path, capsys):
     assert "ana@example.com" in captured.out
     assert "Inválidos: 1" in captured.out
     assert "bad-email" in captured.out
+    assert "Primeros 5:" in captured.out
+    assert "1. ana@example.com | name: Ana | position: Física | afiliacion: UES" in captured.out
     assert "Muestra para ana@example.com" in captured.out
     assert "https://forms.gle/zLxBg2WwMgKRZ7VN8" in captured.out
