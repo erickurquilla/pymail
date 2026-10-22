@@ -1,0 +1,12 @@
+id = "pi_encuesta_2026"
+subject = "Pasantías de Investigación InspiraSTEM 2027: Encuesta de Impacto"
+sheet_id = "1gNMq4y3ucufX1pBRv5gYBBIWxJCTYBOFQW1l6WiGhYk"
+sheet_name = "pi"
+email_column = "email"
+delay_seconds = 2
+cc_columns = []
+
+[columns]
+name = "nombre"
+position = "cargo"
+afiliacion = "universidad"
