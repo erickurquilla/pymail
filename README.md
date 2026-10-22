@@ -48,7 +48,7 @@ En `.env` ya tienen que estar el Gmail y la contraseña de aplicación. Este com
 
     .venv/bin/pymail send campaigns/mentorias-cierre-2026 --limit 1 --to tu@gmail.com
 
-Revisa que haya llegado bien antes de mandar el resto.
+Ese envío de prueba no copia las direcciones de `cc`. Revisa que haya llegado bien antes de mandar el resto.
 
 ## Enviar la lista
 

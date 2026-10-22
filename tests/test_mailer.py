@@ -80,6 +80,55 @@ def test_unfilled_placeholder_refused():
         render_message(broken, {"name": "Ana", "position": "", "afiliacion": ""})
 
 
+def test_to_address_excludes_cc(tmp_path):
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        delay_seconds=0,
+        cc=("copia@example.com",),
+    )
+    ledger = Ledger(tmp_path / "sends.db")
+    recipients = [
+        Recipient(
+            "ana@example.com",
+            {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        )
+    ]
+    opened: list[FakeSMTP] = []
+
+    def factory():
+        smtp = FakeSMTP()
+        opened.append(smtp)
+        return smtp
+
+    deliver(
+        campaign,
+        recipients,
+        ledger,
+        "from@example.com",
+        "secret",
+        to_address="erickurq@gmail.com",
+        smtp_factory=factory,
+        sleeper=lambda _seconds: None,
+    )
+    deliver(
+        campaign,
+        recipients,
+        ledger,
+        "from@example.com",
+        "secret",
+        smtp_factory=factory,
+        sleeper=lambda _seconds: None,
+    )
+
+    test_message = opened[0].sent[0]
+    normal_message = opened[1].sent[0]
+    assert test_message["To"] == "erickurq@gmail.com"
+    assert test_message["Cc"] is None
+    assert normal_message["To"] == "ana@example.com"
+    assert normal_message["Cc"] == "copia@example.com"
+    ledger.close()
+
+
 def test_second_send_is_skipped(tmp_path):
     campaign = replace(load_campaign(CAMPAIGN), delay_seconds=0)
     ledger = Ledger(tmp_path / "sends.db")
