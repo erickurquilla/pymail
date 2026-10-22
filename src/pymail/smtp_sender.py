@@ -20,6 +20,7 @@ class Outbound:
     name: str
     html: str
     text: str
+    cc: tuple[str, ...] = ()
 
 
 def default_smtp_factory():
@@ -49,6 +50,7 @@ def build_outbound(campaign: Campaign, recipient: Recipient, to_address: str | N
         name=(recipient.fields.get("name") or "").strip(),
         html=html,
         text=text,
+        cc=recipient.cc,
     )
 
 
@@ -62,8 +64,8 @@ def _message(
     message["Subject"] = campaign.subject
     message["From"] = from_address
     message["To"] = outbound.email
-    if include_cc and campaign.cc:
-        message["Cc"] = ", ".join(campaign.cc)
+    if include_cc and outbound.cc:
+        message["Cc"] = ", ".join(outbound.cc)
     message.set_content(outbound.text)
     message.add_alternative(outbound.html, subtype="html")
     return message
@@ -88,8 +90,8 @@ def deliver(
     """Render pending rows, then send them on one SMTP session.
 
     ``to_address`` replaces the recipient. The letter uses the first row on
-    the sheet, even when that person was already sent. The campaign Cc list
-    is left off, and nothing is written to the ledger. Rendering happens
+    the sheet, even when that person was already sent. That row's Cc addresses
+    are left off, and nothing is written to the ledger. Rendering happens
     before any connection, so an unfilled placeholder never opens SMTP.
     """
     if to_address:

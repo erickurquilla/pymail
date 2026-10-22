@@ -65,4 +65,4 @@ En la terminal, cada persona se ve así:
 
 Copia la carpeta `campaigns/mentorias-cierre-2026`, cambia el `id`, el asunto, la hoja y los dos archivos `body.html` y `body.txt`. En el HTML y en el texto, `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece.
 
-Para que otras personas reciban copia, escribe sus correos en `cc` dentro de `campaign.toml`. Si no quieres copias, déjalo así: `cc = []`.
+Para que otras personas reciban copia, pon el nombre de esa columna de la hoja en `cc_columns`. Cada fila copia solo las direcciones de su propia celda. Si no quieres copias, déjalo así: `cc_columns = []`.

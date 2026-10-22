@@ -19,12 +19,14 @@ _ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 class Recipient:
     email: str
     fields: dict[str, str]
+    cc: tuple[str, ...] = ()
 
 
 @dataclass
 class RecipientReport:
     recipients: list[Recipient] = field(default_factory=list)
     invalid: list[str] = field(default_factory=list)
+    invalid_cc: list[str] = field(default_factory=list)
     duplicates: list[str] = field(default_factory=list)
     blank_count: int = 0
 
@@ -62,6 +64,10 @@ def parse_recipients(csv_text: str, campaign: Campaign) -> RecipientReport:
         raise ValueError(
             f"La hoja no tiene la columna obligatoria {campaign.email_column!r}."
         )
+    missing_cc = [name for name in campaign.cc_columns if name not in reader.fieldnames]
+    if missing_cc:
+        names = ", ".join(repr(name) for name in missing_cc)
+        raise ValueError(f"La hoja no tiene la columna de copia {names}.")
 
     report = RecipientReport()
     seen: set[str] = set()
@@ -82,5 +88,27 @@ def parse_recipients(csv_text: str, campaign: Campaign) -> RecipientReport:
             logical: (row.get(column) or "").strip()
             for logical, column in campaign.columns.items()
         }
-        report.recipients.append(Recipient(email=raw, fields=fields))
+        report.recipients.append(
+            Recipient(email=raw, fields=fields, cc=_cc_addresses(row, campaign, report))
+        )
     return report
+
+
+def _cc_addresses(row: dict, campaign: Campaign, report: RecipientReport) -> tuple[str, ...]:
+    found: list[str] = []
+    seen: set[str] = set()
+    for column in campaign.cc_columns:
+        cell = row.get(column) or ""
+        for piece in re.split(r"[,;]", cell):
+            address = piece.strip()
+            if not address:
+                continue
+            if not is_valid_email(address):
+                report.invalid_cc.append(address)
+                continue
+            key = address.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            found.append(address)
+    return tuple(found)

@@ -13,7 +13,7 @@ class Campaign:
     sheet_name: str
     email_column: str
     delay_seconds: float
-    cc: tuple[str, ...]
+    cc_columns: tuple[str, ...]
     columns: dict[str, str]
     body_html: str
     body_txt: str
@@ -27,7 +27,7 @@ def load_campaign(path: str | Path) -> Campaign:
         data = tomllib.load(handle)
 
     columns = dict(data.get("columns") or {})
-    cc = tuple(data.get("cc") or [])
+    cc_columns = tuple(str(name) for name in (data.get("cc_columns") or []))
     return Campaign(
         id=str(data["id"]),
         subject=str(data["subject"]),
@@ -35,7 +35,7 @@ def load_campaign(path: str | Path) -> Campaign:
         sheet_name=str(data["sheet_name"]),
         email_column=str(data["email_column"]),
         delay_seconds=float(data.get("delay_seconds", 2)),
-        cc=cc,
+        cc_columns=cc_columns,
         columns=columns,
         body_html=(directory / "body.html").read_text(encoding="utf-8"),
         body_txt=(directory / "body.txt").read_text(encoding="utf-8"),

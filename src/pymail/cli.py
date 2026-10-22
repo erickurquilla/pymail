@@ -83,7 +83,17 @@ def print_preview_rows(campaign, recipients) -> None:
         line = f"  {index}. {recipient.email}"
         if fields:
             line = f"{line} | {fields}"
+        if recipient.cc:
+            line = f"{line} | cc: {', '.join(recipient.cc)}"
         print(line)
+
+
+def print_invalid_cc(report) -> None:
+    if not report.invalid_cc:
+        return
+    print(f"Copias inválidas: {len(report.invalid_cc)}")
+    for item in report.invalid_cc:
+        print(f"  {item}")
 
 
 def preview(campaign, report) -> int:
@@ -95,6 +105,7 @@ def preview(campaign, report) -> int:
     print(f"Inválidos: {len(report.invalid)}")
     for item in report.invalid:
         print(f"  {item}")
+    print_invalid_cc(report)
     print(f"Correos vacíos omitidos: {report.blank_count}")
     if not report.recipients:
         print("No hay una muestra: ningún correo válido.")
@@ -124,6 +135,7 @@ def send(campaign, report, ledger, address, password, limit, to_address, smtp_fa
     if to_address is not None and not is_valid_email(to_address):
         print(f"La dirección de prueba no es válida: {to_address}", file=sys.stderr)
         return 1
+    print_invalid_cc(report)
     try:
         deliver(
             campaign,
