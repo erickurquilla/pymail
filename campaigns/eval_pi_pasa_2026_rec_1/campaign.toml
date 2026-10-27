@@ -1,0 +1,12 @@
+id = "pi_encuesta_2026_rec_1"
+subject = "Queremos conocer los resultados de tu pasantía de investigación InspiraSTEM 2026 (10 min)"
+sheet_id = "1gNMq4y3ucufX1pBRv5gYBBIWxJCTYBOFQW1l6WiGhYk"
+sheet_name = "pi"
+email_column = "email"
+delay_seconds = 2
+cc_columns = []
+
+[columns]
+name = "nombre"
+position = "cargo"
+afiliacion = "universidad"
