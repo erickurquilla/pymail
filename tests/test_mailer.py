@@ -306,3 +306,295 @@ def test_preview_sends_nothing(monkeypatch, tmp_path, capsys):
     assert "1. ana@example.com | name: Ana | position: Física | afiliacion: UES" in captured.out
     assert "Muestra para ana@example.com" in captured.out
     assert "https://example.com" in captured.out
+
+
+TWO_CSV = """\
+Email,Nombre,Carrera,Institucion
+ana@example.com,Ana,Física,UES
+beto@example.com,Beto,Bio,UCA
+"""
+
+SUBJECT_PROMPT = "Escribe y para confirmar el asunto: "
+RECIPIENT_PROMPT = "Escribe y para confirmar el destinatario: "
+TEXT_PROMPT = "Escribe y para confirmar el texto: "
+ALL_PROMPT = "Escribe y para enviarlos todos: "
+TEST_PROMPTS = [SUBJECT_PROMPT, RECIPIENT_PROMPT, TEXT_PROMPT]
+SHEET_PROMPTS = TEST_PROMPTS + [ALL_PROMPT]
+
+
+def _write_csv(tmp_path: Path, text: str) -> Path:
+    path = tmp_path / "people.csv"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _prepare_send(monkeypatch, answers):
+    monkeypatch.setattr("pymail.cli.load_environment", lambda: None)
+    monkeypatch.setenv("EMAIL_ADDRESS", "from@example.com")
+    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
+    calls = []
+
+    def fake_deliver(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr("pymail.cli.deliver", fake_deliver)
+    pending = list(answers)
+    prompts = []
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        if not pending:
+            raise AssertionError(f"input inesperado: {prompt}")
+        return pending.pop(0)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+    return calls, prompts, pending
+
+
+def _send(tmp_path: Path, csv_text: str, *extra: str) -> int:
+    return main(
+        [
+            "send",
+            str(CAMPAIGN),
+            "--csv",
+            str(_write_csv(tmp_path, csv_text)),
+            "--ledger",
+            str(tmp_path / "sends.db"),
+            *extra,
+        ]
+    )
+
+
+def test_to_send_confirms_that_message(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending = _prepare_send(monkeypatch, ["y", "y", "y"])
+
+    code = _send(tmp_path, SAMPLE_CSV, "--limit", "1", "--to", "tu@gmail.com")
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert prompts == TEST_PROMPTS
+    assert pending == []
+    assert "Asunto: Example message" in captured.out
+    assert "Destinatario: tu@gmail.com" in captured.out
+    assert "Destinatario: ana@example.com" not in captured.out
+    assert "This is an example message" in captured.out
+    assert "Ana\nFísica\nUES" in captured.out
+    assert len(calls) == 1
+    _args, kwargs = calls[0]
+    assert kwargs["to_address"] == "tu@gmail.com"
+    assert kwargs["limit"] == 1
+    assert _args[1][0].email == "ana@example.com"
+
+
+def test_sheet_send_confirms_first_then_everyone(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert prompts == SHEET_PROMPTS
+    assert pending == []
+    assert "Asunto: Example message" in captured.out
+    assert "Destinatario: ana@example.com" in captured.out
+    assert "beto@example.com" not in captured.out
+    assert "Beto" not in captured.out
+    assert "Ana\nFísica\nUES" in captured.out
+    assert "Se enviarán 2 correos pendientes de la hoja." in captured.out
+    assert len(calls) == 1
+    args, kwargs = calls[0]
+    assert kwargs["to_address"] is None
+    assert kwargs["limit"] is None
+    assert [recipient.email for recipient in args[1]] == [
+        "ana@example.com",
+        "beto@example.com",
+    ]
+
+
+def test_sheet_send_with_limit_names_the_limit(monkeypatch, tmp_path, capsys):
+    calls, _prompts, pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+
+    code = _send(tmp_path, TWO_CSV, "--limit", "1")
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert pending == []
+    assert "Destinatario: ana@example.com" in captured.out
+    assert "beto@example.com" not in captured.out
+    assert "Se enviará 1 correo pendiente de la hoja. Límite: 1." in captured.out
+    assert calls[0][1]["limit"] == 1
+    assert calls[0][1]["to_address"] is None
+
+
+def test_sheet_send_shows_cc_of_the_first_row(monkeypatch, tmp_path, capsys):
+    campaign = tmp_path / "camp"
+    campaign.mkdir()
+    (campaign / "campaign.toml").write_text(
+        """\
+id = "camp"
+subject = "Hola"
+sheet_id = "x"
+sheet_name = "Sheet1"
+email_column = "Email"
+cc_columns = ["Copia"]
+
+[columns]
+name = "Nombre"
+position = "Carrera"
+afiliacion = "Institucion"
+""",
+        encoding="utf-8",
+    )
+    (campaign / "body.txt").write_text("Carta\n$header_block\n", encoding="utf-8")
+    (campaign / "body.html").write_text("<p>Carta</p>\n$header_block\n", encoding="utf-8")
+    csv_path = _write_csv(
+        tmp_path,
+        """\
+Email,Nombre,Carrera,Institucion,Copia
+ana@example.com,Ana,Física,UES,boss@example.com
+beto@example.com,Beto,Bio,UCA,
+""",
+    )
+    calls, prompts, _pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+
+    code = main(
+        ["send", str(campaign), "--csv", str(csv_path), "--ledger", str(tmp_path / "sends.db")]
+    )
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert prompts == SHEET_PROMPTS
+    assert "Destinatario: ana@example.com | cc: boss@example.com" in captured.out
+    assert "Beto" not in captured.out
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "answers",
+    [
+        ["Y"],
+        ["y", "n"],
+        ["y", "y", ""],
+        ["y", "y", "y", "yes"],
+    ],
+)
+def test_sheet_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
+    calls, prompts, _pending = _prepare_send(monkeypatch, answers)
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert len(prompts) == len(answers)
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+@pytest.mark.parametrize(
+    "answers",
+    [
+        ["n"],
+        ["y", "x"],
+        ["y", "y", "Y"],
+    ],
+)
+def test_to_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
+    calls, prompts, _pending = _prepare_send(monkeypatch, answers)
+
+    code = _send(tmp_path, SAMPLE_CSV, "--to", "tu@gmail.com")
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == TEST_PROMPTS[: len(answers)]
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_eof_cancels_before_sending(monkeypatch, tmp_path, capsys):
+    calls, _prompts, _pending = _prepare_send(monkeypatch, [])
+
+    def fake_input(prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_no_pending_recipients_asks_nothing(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr("pymail.cli.load_environment", lambda: None)
+    monkeypatch.setenv("EMAIL_ADDRESS", "from@example.com")
+    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
+
+    def fail_input(prompt=""):
+        raise AssertionError(f"no debía preguntar: {prompt}")
+
+    def fail_smtp():
+        raise AssertionError("no debía abrir SMTP")
+
+    monkeypatch.setattr("builtins.input", fail_input)
+    monkeypatch.setattr("pymail.smtp_sender.default_smtp_factory", fail_smtp)
+    ledger_path = tmp_path / "sends.db"
+    ledger = Ledger(ledger_path)
+    ledger.record("example", "ana@example.com", "sent")
+    ledger.close()
+
+    code = main(
+        [
+            "send",
+            str(CAMPAIGN),
+            "--csv",
+            str(_csv(tmp_path)),
+            "--ledger",
+            str(ledger_path),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert "No hay correos pendientes. Los ya enviados están en el registro." in captured.out
+
+
+def test_unfilled_placeholder_asks_nothing(monkeypatch, tmp_path, capsys):
+    campaign = tmp_path / "camp"
+    campaign.mkdir()
+    (campaign / "campaign.toml").write_text(
+        """\
+id = "camp"
+subject = "Hola"
+sheet_id = "x"
+sheet_name = "Sheet1"
+email_column = "Email"
+
+[columns]
+name = "Nombre"
+position = "Carrera"
+afiliacion = "Institucion"
+""",
+        encoding="utf-8",
+    )
+    (campaign / "body.txt").write_text("Hola $nombre\n$header_block\n", encoding="utf-8")
+    (campaign / "body.html").write_text("<p>Hola $nombre</p>\n$header_block\n", encoding="utf-8")
+    calls, _prompts, _pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+
+    code = main(
+        [
+            "send",
+            str(campaign),
+            "--csv",
+            str(_csv(tmp_path)),
+            "--ledger",
+            str(tmp_path / "sends.db"),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert _pending == ["y", "y", "y", "y"]
+    assert "Falta el dato $nombre." in captured.err

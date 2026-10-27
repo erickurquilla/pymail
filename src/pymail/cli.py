@@ -12,7 +12,7 @@ from pymail.campaign import load_campaign, project_root_for
 from pymail.ledger import Ledger
 from pymail.recipients import is_valid_email, load_recipients
 from pymail.render import UnfilledPlaceholder, render_message
-from pymail.smtp_sender import deliver
+from pymail.smtp_sender import build_outbound, deliver, select_pending
 
 
 def load_environment() -> None:
@@ -128,6 +128,59 @@ def preview(campaign, report) -> int:
     return 0
 
 
+def _ask_y(prompt: str) -> bool:
+    try:
+        answer = input(prompt)
+    except EOFError:
+        answer = ""
+    if answer == "y":
+        return True
+    print("Envío cancelado. No se envió ningún correo.", file=sys.stderr)
+    return False
+
+
+def _chosen_recipients(campaign, report, ledger, limit, to_address):
+    if to_address:
+        return report.recipients[:1]
+    return select_pending(campaign, report.recipients, ledger, limit=limit)
+
+
+def _recipient_line(recipient, to_address: str | None) -> str:
+    if to_address:
+        return f"Destinatario: {to_address}"
+    line = f"Destinatario: {recipient.email}"
+    if recipient.cc:
+        line = f"{line} | cc: {', '.join(recipient.cc)}"
+    return line
+
+
+def _pending_summary(count: int, limit: int | None) -> str:
+    if count == 1:
+        sentence = "Se enviará 1 correo pendiente de la hoja."
+    else:
+        sentence = f"Se enviarán {count} correos pendientes de la hoja."
+    if limit is None:
+        return sentence
+    return f"{sentence} Límite: {limit}."
+
+
+def _confirm_send(campaign, chosen, letter, to_address, limit) -> bool:
+    print(f"Asunto: {campaign.subject}")
+    if not _ask_y("Escribe y para confirmar el asunto: "):
+        return False
+    print(_recipient_line(chosen[0], to_address))
+    if not _ask_y("Escribe y para confirmar el destinatario: "):
+        return False
+    print("--- texto ---")
+    print(letter)
+    if not _ask_y("Escribe y para confirmar el texto: "):
+        return False
+    if to_address is not None:
+        return True
+    print(_pending_summary(len(chosen), limit))
+    return _ask_y("Escribe y para enviarlos todos: ")
+
+
 def send(campaign, report, ledger, address, password, limit, to_address, smtp_factory=None) -> int:
     if limit is not None and limit < 1:
         print("--limit tiene que ser 1 o más.", file=sys.stderr)
@@ -136,6 +189,17 @@ def send(campaign, report, ledger, address, password, limit, to_address, smtp_fa
         print(f"La dirección de prueba no es válida: {to_address}", file=sys.stderr)
         return 1
     print_invalid_cc(report)
+    chosen = _chosen_recipients(campaign, report, ledger, limit, to_address)
+    if chosen:
+        try:
+            rendered = [
+                build_outbound(campaign, recipient, to_address) for recipient in chosen
+            ]
+        except UnfilledPlaceholder as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        if not _confirm_send(campaign, chosen, rendered[0].text, to_address, limit):
+            return 1
     try:
         deliver(
             campaign,

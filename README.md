@@ -50,9 +50,13 @@ En `.env` ya tienen que estar el Gmail y la contraseña de aplicación. Este com
 
 Ese envío de prueba no copia las direcciones de `cc` y no se escribe en `sends.db`, así que puedes repetirlo y la lista real sigue pendiente. También se envía cuando toda la lista ya fue mandada. Revisa que haya llegado bien antes de mandar el resto.
 
+Antes de mandar, el programa muestra el asunto, la dirección de prueba y el texto de la carta. En cada paso hay que escribir `y` y pulsar Enter. Cualquier otra respuesta cancela el envío y no manda nada.
+
 ## Enviar la lista
 
     .venv/bin/pymail send campaigns/example
+
+Antes de mandar, el programa muestra el asunto, el destinatario y el texto del primer correo que todavía no está en el registro. En cada paso hay que escribir `y`. Después pregunta si se envían todos los correos pendientes de la hoja, e indica cuántos son. Cualquier otra respuesta cancela el envío y no manda nada.
 
 Entre un correo y el siguiente el programa espera 2 segundos. Si se corta a la mitad, vuelve a ejecutar el mismo comando: no repite los que ya se enviaron. El registro queda en `sends.db` en esta carpeta. Ese archivo tampoco se sube a GitHub.
 
