@@ -1,0 +1,12 @@
+id = "djhkahjd"
+subject = "Queremos conocer tu experiencia en la pasantía de investigación InspiraSTEM 2026 (15 min)"
+sheet_id = "1gNMq4y3ucufX1pBRv5gYBBIWxJCTYBOFQW1l6WiGhYk"
+sheet_name = "interns"
+email_column = "email"
+delay_seconds = 2
+cc_columns = []
+
+[columns]
+name = "nombre"
+position = "carrera"
+afiliacion = "universidad"
