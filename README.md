@@ -67,6 +67,6 @@ En la terminal, cada persona se ve así:
 
 ## Otra campaña
 
-Copia la carpeta `campaigns/example`, cambia el `id`, el asunto, la hoja y los dos archivos `body.html` y `body.txt`. En el HTML y en el texto, `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece.
+Copia la carpeta `campaigns/example`, cambia el `id`, el asunto, la hoja y `body.txt`. El programa arma el HTML a partir de ese texto: una línea en blanco empieza un párrafo, un salto de línea simple se vuelve un salto, y las direcciones web se vuelven enlaces. `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece.
 
 Para que otras personas reciban copia, pon el nombre de esa columna de la hoja en `cc_columns`. Cada fila copia solo las direcciones de su propia celda. Si no quieres copias, déjalo así: `cc_columns = []`.

@@ -1,4 +1,4 @@
-"""Carga una carpeta de campaña: campaign.toml, body.html y body.txt."""
+"""Carga una carpeta de campaña: campaign.toml y body.txt."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +15,6 @@ class Campaign:
     delay_seconds: float
     cc_columns: tuple[str, ...]
     columns: dict[str, str]
-    body_html: str
     body_txt: str
     directory: Path
 
@@ -37,7 +36,6 @@ def load_campaign(path: str | Path) -> Campaign:
         delay_seconds=float(data.get("delay_seconds", 2)),
         cc_columns=cc_columns,
         columns=columns,
-        body_html=(directory / "body.html").read_text(encoding="utf-8"),
         body_txt=(directory / "body.txt").read_text(encoding="utf-8"),
         directory=directory,
     )

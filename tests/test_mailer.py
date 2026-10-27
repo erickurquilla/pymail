@@ -7,7 +7,7 @@ from pymail.campaign import load_campaign
 from pymail.cli import main
 from pymail.ledger import Ledger
 from pymail.recipients import Recipient, parse_recipients
-from pymail.render import UnfilledPlaceholder, render_message
+from pymail.render import UnfilledPlaceholder, render_message, text_to_html
 from pymail.smtp_sender import deliver
 
 import pytest
@@ -70,13 +70,50 @@ def test_header_omitted_when_empty():
 
 def test_unfilled_placeholder_refused():
     campaign = load_campaign(CAMPAIGN)
-    broken = replace(
-        campaign,
-        body_html="Hola $nombre\n$header_block",
-        body_txt="Hola $nombre\n$header_block",
-    )
+    broken = replace(campaign, body_txt="Hola $nombre\n$header_block")
     with pytest.raises(UnfilledPlaceholder):
         render_message(broken, {"name": "Ana", "position": "", "afiliacion": ""})
+
+
+def test_text_to_html_builds_basic_letter():
+    html = text_to_html(
+        "Hola,\n\n"
+        "$header_block\n\n"
+        "Physics & Astronomy <lab>\n"
+        "Completa la encuesta aquí: https://forms.gle/abc\n"
+        "Fecha límite: 29 de octubre de 2026\n\n"
+        "Co-founder inspirastem.com\n"
+        "ana@example.com\n"
+    )
+
+    assert html.startswith("<html>\n<body>\n")
+    assert html.endswith("</body>\n</html>\n")
+    assert "<p>Hola,</p>" in html
+    assert "$header_block" in html
+    assert "<p>$header_block</p>" not in html
+    assert "Physics &amp; Astronomy &lt;lab&gt;" in html
+    assert '<a href="https://forms.gle/abc">https://forms.gle/abc</a>' in html
+    assert "Fecha límite: 29 de octubre de 2026" in html
+    assert "<br>\n" in html
+    assert '<a href="https://inspirastem.com">inspirastem.com</a>' in html
+    assert "ana@example.com" in html
+    assert 'href="https://example.com"' not in html
+
+
+def test_generated_html_keeps_italic_header():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_txt="Hola,\n\n$header_block\n\nAdiós\n",
+    )
+    html, text = render_message(
+        campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
+    )
+
+    assert "<p>Hola,</p>" in html
+    assert "<em>Ana<br>" in html
+    assert "<p>Adiós</p>" in html
+    assert "$header_block" not in html
+    assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
 
 
 def test_cc_comes_from_the_row(tmp_path):
@@ -446,7 +483,6 @@ afiliacion = "Institucion"
         encoding="utf-8",
     )
     (campaign / "body.txt").write_text("Carta\n$header_block\n", encoding="utf-8")
-    (campaign / "body.html").write_text("<p>Carta</p>\n$header_block\n", encoding="utf-8")
     csv_path = _write_csv(
         tmp_path,
         """\
@@ -579,7 +615,6 @@ afiliacion = "Institucion"
         encoding="utf-8",
     )
     (campaign / "body.txt").write_text("Hola $nombre\n$header_block\n", encoding="utf-8")
-    (campaign / "body.html").write_text("<p>Hola $nombre</p>\n$header_block\n", encoding="utf-8")
     calls, _prompts, _pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
 
     code = main(
