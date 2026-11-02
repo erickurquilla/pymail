@@ -3,20 +3,14 @@
 
 from pathlib import Path
 import argparse
-import os
+import getpass
 import sys
-
-from dotenv import load_dotenv
 
 from pymail.campaign import load_campaign, project_root_for
 from pymail.ledger import Ledger
 from pymail.recipients import is_valid_email, load_recipients
 from pymail.render import UnfilledPlaceholder, render_message
 from pymail.smtp_sender import build_outbound, deliver, select_pending
-
-
-def load_environment() -> None:
-    load_dotenv()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -56,15 +50,55 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def credentials() -> tuple[str, str] | None:
-    address = os.environ.get("EMAIL_ADDRESS", "").strip()
-    password = os.environ.get("EMAIL_PASSWORD", "").strip()
-    if not address or not password:
+ADDRESS_PROMPT = "Correo de Gmail: "
+PASSWORD_PROMPT = "Contraseña de aplicación de Gmail: "
+
+
+def _cancel_send() -> None:
+    print("Envío cancelado. No se envió ningún correo.", file=sys.stderr)
+
+
+def prompt_address() -> str | None:
+    try:
+        address = input(ADDRESS_PROMPT)
+    except EOFError:
+        address = ""
+    address = address.strip()
+    if not address:
+        _cancel_send()
+        return None
+    if not is_valid_email(address):
+        print(f"La dirección no es válida: {address}", file=sys.stderr)
+        _cancel_send()
+        return None
+    return address
+
+
+def prompt_password() -> str | None:
+    try:
+        password = getpass.getpass(PASSWORD_PROMPT)
+    except EOFError:
+        password = ""
+    password = password.strip()
+    if not password:
+        _cancel_send()
+        return None
+    return password
+
+
+def prompt_credentials() -> tuple[str, str] | None:
+    if not sys.stdin.isatty():
         print(
-            "Faltan EMAIL_ADDRESS o EMAIL_PASSWORD. "
-            "Copia .env.example a .env y completa los dos valores.",
+            "El correo y la contraseña solo se escriben en la terminal. "
+            "No se leen desde un archivo ni desde el entorno.",
             file=sys.stderr,
         )
+        return None
+    address = prompt_address()
+    if address is None:
+        return None
+    password = prompt_password()
+    if password is None:
         return None
     return address, password
 
@@ -135,7 +169,7 @@ def _ask_y(prompt: str) -> bool:
         answer = ""
     if answer == "y":
         return True
-    print("Envío cancelado. No se envió ningún correo.", file=sys.stderr)
+    _cancel_send()
     return False
 
 
@@ -181,7 +215,7 @@ def _confirm_send(campaign, chosen, letter, to_address, limit) -> bool:
     return _ask_y("Escribe y para enviarlos todos: ")
 
 
-def send(campaign, report, ledger, address, password, limit, to_address, smtp_factory=None) -> int:
+def send(campaign, report, ledger, limit, to_address, smtp_factory=None) -> int:
     if limit is not None and limit < 1:
         print("--limit tiene que ser 1 o más.", file=sys.stderr)
         return 1
@@ -190,6 +224,8 @@ def send(campaign, report, ledger, address, password, limit, to_address, smtp_fa
         return 1
     print_invalid_cc(report)
     chosen = _chosen_recipients(campaign, report, ledger, limit, to_address)
+    address = ""
+    password = ""
     if chosen:
         try:
             rendered = [
@@ -200,6 +236,10 @@ def send(campaign, report, ledger, address, password, limit, to_address, smtp_fa
             return 1
         if not _confirm_send(campaign, chosen, rendered[0].text, to_address, limit):
             return 1
+        found = prompt_credentials()
+        if found is None:
+            return 1
+        address, password = found
     try:
         deliver(
             campaign,
@@ -229,7 +269,6 @@ def _sleep(seconds: float) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    load_environment()
     try:
         campaign = load_campaign(args.campaign)
         report = load_recipients(campaign, csv_path=args.csv)
@@ -240,14 +279,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "preview":
         return preview(campaign, report)
 
-    found = credentials()
-    if found is None:
-        return 1
-    address, password = found
     ledger_path = args.ledger or (project_root_for(campaign.directory) / "sends.db")
     ledger = Ledger(ledger_path)
     try:
-        return send(campaign, report, ledger, address, password, args.limit, args.to)
+        return send(campaign, report, ledger, args.limit, args.to)
     finally:
         ledger.close()
 

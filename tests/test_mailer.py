@@ -2,9 +2,11 @@
 
 from dataclasses import replace
 from pathlib import Path
+import os
+import sys
 
 from pymail.campaign import load_campaign
-from pymail.cli import main
+from pymail.cli import ADDRESS_PROMPT, PASSWORD_PROMPT, main
 from pymail.ledger import Ledger
 from pymail.recipients import Recipient, parse_recipients
 from pymail.render import UnfilledPlaceholder, render_message, text_to_html
@@ -295,31 +297,6 @@ def test_second_send_is_skipped(tmp_path):
     ledger.close()
 
 
-def test_send_without_env_does_not_send(monkeypatch, tmp_path):
-    monkeypatch.setattr("pymail.cli.load_environment", lambda: None)
-    monkeypatch.delenv("EMAIL_ADDRESS", raising=False)
-    monkeypatch.delenv("EMAIL_PASSWORD", raising=False)
-    calls = []
-    monkeypatch.setattr(
-        "pymail.cli.deliver",
-        lambda *args, **kwargs: calls.append("deliver"),
-    )
-
-    code = main(
-        [
-            "send",
-            str(CAMPAIGN),
-            "--csv",
-            str(_csv(tmp_path)),
-            "--ledger",
-            str(tmp_path / "sends.db"),
-        ]
-    )
-
-    assert code == 1
-    assert calls == []
-
-
 def test_preview_sends_nothing(monkeypatch, tmp_path, capsys):
     def open_smtp(*args, **kwargs):
         raise AssertionError("preview abrió SMTP")
@@ -365,27 +342,46 @@ def _write_csv(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def _prepare_send(monkeypatch, answers):
-    monkeypatch.setattr("pymail.cli.load_environment", lambda: None)
-    monkeypatch.setenv("EMAIL_ADDRESS", "from@example.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
+def _prepare_send(
+    monkeypatch,
+    answers,
+    *,
+    tty=True,
+    password="  secret  ",
+    address="  from@example.com  ",
+):
+    monkeypatch.setenv("EMAIL_ADDRESS", "stored@example.com")
+    monkeypatch.setenv("EMAIL_PASSWORD", "from-env")
     calls = []
 
     def fake_deliver(*args, **kwargs):
+        assert os.environ.get("EMAIL_ADDRESS") == "stored@example.com"
+        assert os.environ.get("EMAIL_PASSWORD") == "from-env"
         calls.append((args, kwargs))
 
     monkeypatch.setattr("pymail.cli.deliver", fake_deliver)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: tty)
     pending = list(answers)
     prompts = []
+    password_prompts = []
 
     def fake_input(prompt=""):
         prompts.append(prompt)
+        if prompt == ADDRESS_PROMPT:
+            if address is None:
+                raise EOFError
+            return address
         if not pending:
             raise AssertionError(f"input inesperado: {prompt}")
         return pending.pop(0)
 
+    def fake_getpass(prompt=""):
+        password_prompts.append(prompt)
+        return password
+
     monkeypatch.setattr("builtins.input", fake_input)
-    return calls, prompts, pending
+    monkeypatch.setattr("pymail.cli.getpass.getpass", fake_getpass)
+    return calls, prompts, pending, password_prompts
 
 
 def _send(tmp_path: Path, csv_text: str, *extra: str) -> int:
@@ -403,13 +399,13 @@ def _send(tmp_path: Path, csv_text: str, *extra: str) -> int:
 
 
 def test_to_send_confirms_that_message(monkeypatch, tmp_path, capsys):
-    calls, prompts, pending = _prepare_send(monkeypatch, ["y", "y", "y"])
+    calls, prompts, pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y"])
 
     code = _send(tmp_path, SAMPLE_CSV, "--limit", "1", "--to", "tu@gmail.com")
     captured = capsys.readouterr()
 
     assert code == 0
-    assert prompts == TEST_PROMPTS
+    assert prompts == TEST_PROMPTS + [ADDRESS_PROMPT]
     assert pending == []
     assert "Asunto: Example message" in captured.out
     assert "Destinatario: tu@gmail.com" in captured.out
@@ -421,16 +417,19 @@ def test_to_send_confirms_that_message(monkeypatch, tmp_path, capsys):
     assert kwargs["to_address"] == "tu@gmail.com"
     assert kwargs["limit"] == 1
     assert _args[1][0].email == "ana@example.com"
+    assert _args[3] == "from@example.com"
+    assert _args[4] == "secret"
+    assert password_prompts == [PASSWORD_PROMPT]
 
 
 def test_sheet_send_confirms_first_then_everyone(monkeypatch, tmp_path, capsys):
-    calls, prompts, pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, prompts, pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
 
     code = _send(tmp_path, TWO_CSV)
     captured = capsys.readouterr()
 
     assert code == 0
-    assert prompts == SHEET_PROMPTS
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
     assert pending == []
     assert "Asunto: Example message" in captured.out
     assert "Destinatario: ana@example.com" in captured.out
@@ -446,10 +445,13 @@ def test_sheet_send_confirms_first_then_everyone(monkeypatch, tmp_path, capsys):
         "ana@example.com",
         "beto@example.com",
     ]
+    assert args[3] == "from@example.com"
+    assert args[4] == "secret"
+    assert password_prompts == [PASSWORD_PROMPT]
 
 
 def test_sheet_send_with_limit_names_the_limit(monkeypatch, tmp_path, capsys):
-    calls, _prompts, pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, _prompts, pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
 
     code = _send(tmp_path, TWO_CSV, "--limit", "1")
     captured = capsys.readouterr()
@@ -461,6 +463,10 @@ def test_sheet_send_with_limit_names_the_limit(monkeypatch, tmp_path, capsys):
     assert "Se enviará 1 correo pendiente de la hoja. Límite: 1." in captured.out
     assert calls[0][1]["limit"] == 1
     assert calls[0][1]["to_address"] is None
+    assert calls[0][0][3] == "from@example.com"
+    assert calls[0][0][4] == "secret"
+    assert password_prompts == [PASSWORD_PROMPT]
+    assert _prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
 
 
 def test_sheet_send_shows_cc_of_the_first_row(monkeypatch, tmp_path, capsys):
@@ -491,7 +497,7 @@ ana@example.com,Ana,Física,UES,boss@example.com
 beto@example.com,Beto,Bio,UCA,
 """,
     )
-    calls, prompts, _pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, prompts, _pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
 
     code = main(
         ["send", str(campaign), "--csv", str(csv_path), "--ledger", str(tmp_path / "sends.db")]
@@ -499,10 +505,13 @@ beto@example.com,Beto,Bio,UCA,
     captured = capsys.readouterr()
 
     assert code == 0
-    assert prompts == SHEET_PROMPTS
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
     assert "Destinatario: ana@example.com | cc: boss@example.com" in captured.out
     assert "Beto" not in captured.out
     assert len(calls) == 1
+    assert calls[0][0][3] == "from@example.com"
+    assert calls[0][0][4] == "secret"
+    assert password_prompts == [PASSWORD_PROMPT]
 
 
 @pytest.mark.parametrize(
@@ -515,7 +524,7 @@ beto@example.com,Beto,Bio,UCA,
     ],
 )
 def test_sheet_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
-    calls, prompts, _pending = _prepare_send(monkeypatch, answers)
+    calls, prompts, _pending, password_prompts = _prepare_send(monkeypatch, answers)
 
     code = _send(tmp_path, TWO_CSV)
     captured = capsys.readouterr()
@@ -523,6 +532,8 @@ def test_sheet_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers)
     assert code == 1
     assert calls == []
     assert len(prompts) == len(answers)
+    assert ADDRESS_PROMPT not in prompts
+    assert password_prompts == []
     assert "Envío cancelado. No se envió ningún correo." in captured.err
 
 
@@ -535,7 +546,7 @@ def test_sheet_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers)
     ],
 )
 def test_to_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
-    calls, prompts, _pending = _prepare_send(monkeypatch, answers)
+    calls, prompts, _pending, password_prompts = _prepare_send(monkeypatch, answers)
 
     code = _send(tmp_path, SAMPLE_CSV, "--to", "tu@gmail.com")
     captured = capsys.readouterr()
@@ -543,11 +554,13 @@ def test_to_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
     assert code == 1
     assert calls == []
     assert prompts == TEST_PROMPTS[: len(answers)]
+    assert ADDRESS_PROMPT not in prompts
+    assert password_prompts == []
     assert "Envío cancelado. No se envió ningún correo." in captured.err
 
 
 def test_eof_cancels_before_sending(monkeypatch, tmp_path, capsys):
-    calls, _prompts, _pending = _prepare_send(monkeypatch, [])
+    calls, _prompts, _pending, password_prompts = _prepare_send(monkeypatch, [])
 
     def fake_input(prompt=""):
         raise EOFError
@@ -559,21 +572,25 @@ def test_eof_cancels_before_sending(monkeypatch, tmp_path, capsys):
 
     assert code == 1
     assert calls == []
+    assert password_prompts == []
     assert "Envío cancelado. No se envió ningún correo." in captured.err
 
 
 def test_no_pending_recipients_asks_nothing(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr("pymail.cli.load_environment", lambda: None)
-    monkeypatch.setenv("EMAIL_ADDRESS", "from@example.com")
-    monkeypatch.setenv("EMAIL_PASSWORD", "secret")
+    monkeypatch.setenv("EMAIL_ADDRESS", "stored@example.com")
+    monkeypatch.setenv("EMAIL_PASSWORD", "from-env")
 
     def fail_input(prompt=""):
         raise AssertionError(f"no debía preguntar: {prompt}")
+
+    def fail_getpass(prompt=""):
+        raise AssertionError(f"no debía pedir la contraseña: {prompt}")
 
     def fail_smtp():
         raise AssertionError("no debía abrir SMTP")
 
     monkeypatch.setattr("builtins.input", fail_input)
+    monkeypatch.setattr("pymail.cli.getpass.getpass", fail_getpass)
     monkeypatch.setattr("pymail.smtp_sender.default_smtp_factory", fail_smtp)
     ledger_path = tmp_path / "sends.db"
     ledger = Ledger(ledger_path)
@@ -615,7 +632,7 @@ afiliacion = "Institucion"
         encoding="utf-8",
     )
     (campaign / "body.txt").write_text("Hola $nombre\n$header_block\n", encoding="utf-8")
-    calls, _prompts, _pending = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, _prompts, _pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
 
     code = main(
         [
@@ -632,4 +649,121 @@ afiliacion = "Institucion"
     assert code == 1
     assert calls == []
     assert _pending == ["y", "y", "y", "y"]
+    assert ADDRESS_PROMPT not in _prompts
+    assert password_prompts == []
     assert "Falta el dato $nombre." in captured.err
+
+
+def test_send_without_tty_does_not_send(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch,
+        ["y", "y", "y", "y"],
+        tty=False,
+    )
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == SHEET_PROMPTS
+    assert ADDRESS_PROMPT not in prompts
+    assert pending == []
+    assert password_prompts == []
+    assert "El correo y la contraseña solo se escriben en la terminal." in captured.err
+
+
+def test_empty_password_cancels(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch,
+        ["y", "y", "y", "y"],
+        password="   ",
+    )
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
+    assert pending == []
+    assert password_prompts == [PASSWORD_PROMPT]
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_password_eof_cancels(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch,
+        ["y", "y", "y", "y"],
+    )
+
+    def raise_eof(prompt=""):
+        password_prompts.append(prompt)
+        raise EOFError
+
+    monkeypatch.setattr("pymail.cli.getpass.getpass", raise_eof)
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
+    assert pending == []
+    assert password_prompts == [PASSWORD_PROMPT]
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_empty_address_cancels_before_password(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch,
+        ["y", "y", "y", "y"],
+        address="   ",
+    )
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
+    assert pending == []
+    assert password_prompts == []
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_invalid_address_cancels_before_password(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch,
+        ["y", "y", "y", "y"],
+        address="no-es-correo",
+    )
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
+    assert pending == []
+    assert password_prompts == []
+    assert "La dirección no es válida: no-es-correo" in captured.err
+    assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_address_eof_cancels_before_password(monkeypatch, tmp_path, capsys):
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch,
+        ["y", "y", "y", "y"],
+        address=None,
+    )
+
+    code = _send(tmp_path, TWO_CSV)
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == SHEET_PROMPTS + [ADDRESS_PROMPT]
+    assert pending == []
+    assert password_prompts == []
+    assert "Envío cancelado. No se envió ningún correo." in captured.err

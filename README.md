@@ -1,6 +1,6 @@
 # pymail
 
-Programa para enviar una carta a cada persona de una hoja de Google. Cada carta es una carpeta dentro de `campaigns/`. El programa no guarda la contraseña de Gmail.
+Programa para enviar una carta a cada persona de una hoja de Google. Cada carta es una carpeta dentro de `campaigns/`. El programa no guarda el correo ni la contraseña de Gmail.
 
 La campaña de ejemplo es `campaigns/example`.
 
@@ -14,7 +14,7 @@ La campaña de ejemplo es `campaigns/example`.
 
    Cuenta de Google, Seguridad, Verificación en dos pasos, Contraseñas de aplicaciones, Crear.
 
-   Cópiala con los espacios, así: `abcd efgh ijkl mnop`.
+   Cuando el programa la pida, escríbela en la terminal. Puede llevar espacios, así: `abcd efgh ijkl mnop`. No la guardes en un archivo. El correo de Gmail también se escribe en la terminal, y ese sí se muestra.
 
 ## Preparar el programa (una sola vez)
 
@@ -22,17 +22,6 @@ Abre una terminal en esta carpeta y escribe:
 
     python3 -m venv .venv
     .venv/bin/pip install -e .
-
-Copia el archivo de ejemplo y pon tus datos:
-
-    cp .env.example .env
-
-Abre `.env` y completa las dos líneas:
-
-    EMAIL_ADDRESS=cuenta@gmail.com
-    EMAIL_PASSWORD=abcd efgh ijkl mnop
-
-Ese archivo no se sube a GitHub. No lo compartas.
 
 En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/example/campaign.toml`. En el ejemplo la pestaña se llama `Sheet1` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`.
 
@@ -44,19 +33,19 @@ Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetid
 
 ## Probar con un solo correo
 
-En `.env` ya tienen que estar el Gmail y la contraseña de aplicación. Este comando manda una sola carta a la dirección que escribas, usando los datos de la primera fila de la hoja:
+Este comando manda una sola carta a la dirección que escribas, usando los datos de la primera fila de la hoja:
 
     .venv/bin/pymail send campaigns/example --limit 1 --to tu@gmail.com
 
 Ese envío de prueba no copia las direcciones de `cc` y no se escribe en `sends.db`, así que puedes repetirlo y la lista real sigue pendiente. También se envía cuando toda la lista ya fue mandada. Revisa que haya llegado bien antes de mandar el resto.
 
-Antes de mandar, el programa muestra el asunto, la dirección de prueba y el texto de la carta. En cada paso hay que escribir `y` y pulsar Enter. Cualquier otra respuesta cancela el envío y no manda nada.
+Antes de mandar, el programa muestra el asunto, la dirección de prueba y el texto de la carta. En cada paso hay que escribir `y` y pulsar Enter. Si confirmas, pide el correo de Gmail y lo muestra. Después pide la contraseña de aplicación y no la muestra. Cualquier otra respuesta cancela el envío y no manda nada. Si no escribes el correo o la contraseña, también cancela.
 
 ## Enviar la lista
 
     .venv/bin/pymail send campaigns/example
 
-Antes de mandar, el programa muestra el asunto, el destinatario y el texto del primer correo que todavía no está en el registro. En cada paso hay que escribir `y`. Después pregunta si se envían todos los correos pendientes de la hoja, e indica cuántos son. Cualquier otra respuesta cancela el envío y no manda nada.
+Antes de mandar, el programa muestra el asunto, el destinatario y el texto del primer correo que todavía no está en el registro. En cada paso hay que escribir `y`. Después pregunta si se envían todos los correos pendientes de la hoja, e indica cuántos son. Si confirmas, pide el correo de Gmail y lo muestra. Después pide la contraseña de aplicación y no la muestra. Cualquier otra respuesta cancela el envío y no manda nada. Si no escribes el correo o la contraseña, también cancela.
 
 Entre un correo y el siguiente el programa espera 2 segundos. Si se corta a la mitad, vuelve a ejecutar el mismo comando: no repite los que ya se enviaron. El registro queda en `sends.db` en esta carpeta. Ese archivo tampoco se sube a GitHub.
 

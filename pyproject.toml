@@ -3,9 +3,7 @@ name = "pymail"
 version = "0.1.0"
 description = "Envío de correos por campañas, con vista previa y registro de envíos."
 requires-python = ">=3.11"
-dependencies = [
-    "python-dotenv",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
