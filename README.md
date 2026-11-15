@@ -23,7 +23,7 @@ Abre una terminal en esta carpeta y escribe:
     python3 -m venv .venv
     .venv/bin/pip install -e .
 
-En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/example/campaign.toml`. En el ejemplo la pestaña se llama `Sheet1` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`.
+En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/example/campaign.toml`. En el ejemplo la pestaña se llama `Sheet1` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`. `sheet_id` puede ser el enlace para editar o solo el id. La pestaña sigue en `sheet_name`.
 
 ## Ver la carta sin enviarla
 

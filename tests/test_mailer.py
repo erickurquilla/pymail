@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 import sys
 
-from pymail.campaign import load_campaign
+from pymail.campaign import load_campaign, sheet_id_from
 from pymail.cli import ADDRESS_PROMPT, PASSWORD_PROMPT, main
 from pymail.ledger import Ledger
 from pymail.recipients import Recipient, parse_recipients
@@ -119,13 +119,13 @@ def test_generated_html_keeps_italic_header():
     assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
 
 
-def _campaign_dir(tmp_path, *, body_format=None, body=None):
+def _campaign_dir(tmp_path, *, body_format=None, body=None, sheet_id="x"):
     directory = tmp_path / "camp"
     directory.mkdir()
     lines = [
         'id = "camp"',
         'subject = "Hola"',
-        'sheet_id = "x"',
+        f'sheet_id = "{sheet_id}"',
         'sheet_name = "Sheet1"',
         'email_column = "Email"',
     ]
@@ -151,6 +151,48 @@ def test_example_campaign_loads_html():
     campaign = load_campaign(CAMPAIGN)
     assert campaign.body_format == "html"
     assert campaign.body == (CAMPAIGN / "body.html").read_text(encoding="utf-8")
+
+
+_SHEET = "1DMcbmrzLUTErmQ53HEFMDUAiebcypitCwC_hgX08eK0"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("example-sheet-id", "example-sheet-id"),
+        ("x", "x"),
+        (f"  {_SHEET}  ", _SHEET),
+        (
+            f"https://docs.google.com/spreadsheets/d/{_SHEET}/edit?usp=sharing",
+            _SHEET,
+        ),
+        (f"https://docs.google.com/spreadsheets/d/{_SHEET}/edit#gid=0", _SHEET),
+        (f"https://docs.google.com/spreadsheets/u/0/d/{_SHEET}/edit", _SHEET),
+        (f"docs.google.com/spreadsheets/d/{_SHEET}/edit", _SHEET),
+    ],
+)
+def test_sheet_id_accepts_link_or_bare_id(value, expected):
+    assert sheet_id_from(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        f"https://docs.google.com/spreadsheets/d/e/2PACX-{_SHEET}/pubhtml",
+        "https://example.com/not-a-sheet",
+        "https://docs.google.com/document/d/abc",
+    ],
+)
+def test_sheet_id_rejects_unusable_link(value):
+    with pytest.raises(ValueError, match="enlace para editar"):
+        sheet_id_from(value)
+
+
+def test_load_campaign_stores_sheet_id_from_url(tmp_path):
+    url = f"https://docs.google.com/spreadsheets/d/{_SHEET}/edit?usp=sharing#gid=0"
+    directory = _campaign_dir(tmp_path, body="Hola\n", sheet_id=url)
+    campaign = load_campaign(directory)
+    assert campaign.sheet_id == _SHEET
 
 
 def test_omitted_format_reads_txt_and_ignores_html(tmp_path):

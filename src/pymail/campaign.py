@@ -2,10 +2,22 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 import tomllib
 
 
 BODY_FORMATS = ("txt", "html")
+_SHEET_IN_URL = re.compile(
+    r"spreadsheets/(?:u/\d+/)?d/([A-Za-z0-9-_]+)",
+    re.IGNORECASE,
+)
+_PUBLISHED_SHEET = re.compile(
+    r"spreadsheets/(?:u/\d+/)?d/e/",
+    re.IGNORECASE,
+)
+_SHEET_ID_ERROR = (
+    "No se pudo leer el id de la hoja. Pega el enlace para editar o solo el id."
+)
 
 
 @dataclass(frozen=True)
@@ -21,6 +33,23 @@ class Campaign:
     body_format: str
     body: str
     directory: Path
+
+
+def sheet_id_from(value: str) -> str:
+    """Devuelve el id de la hoja, venga solo o dentro de un enlace de Google."""
+    text = value.strip()
+    lowered = text.lower()
+    looks_like_link = (
+        lowered.startswith(("http://", "https://")) or "docs.google.com" in lowered
+    )
+    if not looks_like_link:
+        return text
+    if _PUBLISHED_SHEET.search(text):
+        raise ValueError(_SHEET_ID_ERROR)
+    match = _SHEET_IN_URL.search(text)
+    if match is None:
+        raise ValueError(_SHEET_ID_ERROR)
+    return match.group(1)
 
 
 def load_campaign(path: str | Path) -> Campaign:
@@ -41,7 +70,7 @@ def load_campaign(path: str | Path) -> Campaign:
     return Campaign(
         id=str(data["id"]),
         subject=str(data["subject"]),
-        sheet_id=str(data["sheet_id"]),
+        sheet_id=sheet_id_from(str(data["sheet_id"])),
         sheet_name=str(data["sheet_name"]),
         email_column=str(data["email_column"]),
         delay_seconds=float(data.get("delay_seconds", 2)),
