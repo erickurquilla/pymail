@@ -162,12 +162,12 @@ def preview(campaign, report) -> int:
     return 0
 
 
-def _ask_y(prompt: str) -> bool:
+def _confirm(prompt: str) -> bool:
     try:
-        answer = input(prompt)
+        answer = input(f"{prompt} [yes/no]: ")
     except EOFError:
         answer = ""
-    if answer == "y":
+    if answer == "yes":
         return True
     _cancel_send()
     return False
@@ -200,19 +200,19 @@ def _pending_summary(count: int, limit: int | None) -> str:
 
 def _confirm_send(campaign, chosen, letter, to_address, limit) -> bool:
     print(f"Asunto: {campaign.subject}")
-    if not _ask_y("Escribe y para confirmar el asunto: "):
+    if not _confirm("¿Confirmas el asunto?"):
         return False
     print(_recipient_line(chosen[0], to_address))
-    if not _ask_y("Escribe y para confirmar el destinatario: "):
+    if not _confirm("¿Confirmas el destinatario?"):
         return False
     print("--- texto ---")
     print(letter)
-    if not _ask_y("Escribe y para confirmar el texto: "):
+    if not _confirm("¿Confirmas el texto?"):
         return False
     if to_address is not None:
         return True
     print(_pending_summary(len(chosen), limit))
-    return _ask_y("Escribe y para enviarlos todos: ")
+    return _confirm("¿Envías todos los correos pendientes?")
 
 
 def send(campaign, report, ledger, limit, to_address, smtp_factory=None) -> int:

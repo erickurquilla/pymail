@@ -39,13 +39,13 @@ Este comando manda una sola carta a la dirección que escribas, usando los datos
 
 Ese envío de prueba no copia las direcciones de `cc` y no se escribe en `sends.db`, así que puedes repetirlo y la lista real sigue pendiente. También se envía cuando toda la lista ya fue mandada. Revisa que haya llegado bien antes de mandar el resto.
 
-Antes de mandar, el programa muestra el asunto, la dirección de prueba y el texto de la carta. En cada paso hay que escribir `y` y pulsar Enter. Si confirmas, pide el correo de Gmail y lo muestra. Después pide la contraseña de aplicación y no la muestra. Cualquier otra respuesta cancela el envío y no manda nada. Si no escribes el correo o la contraseña, también cancela.
+Antes de mandar, el programa muestra el asunto, la dirección de prueba y el texto de la carta. En cada paso la pregunta muestra `[yes/no]`. Solo `yes` confirma. Cualquier otra respuesta, incluida `y`, cancela el envío y no manda nada. Si confirmas, pide el correo de Gmail y lo muestra. Después pide la contraseña de aplicación y no la muestra. Si no escribes el correo o la contraseña, también cancela.
 
 ## Enviar la lista
 
     .venv/bin/pymail send campaigns/example
 
-Antes de mandar, el programa muestra el asunto, el destinatario y el texto del primer correo que todavía no está en el registro. En cada paso hay que escribir `y`. Después pregunta si se envían todos los correos pendientes de la hoja, e indica cuántos son. Si confirmas, pide el correo de Gmail y lo muestra. Después pide la contraseña de aplicación y no la muestra. Cualquier otra respuesta cancela el envío y no manda nada. Si no escribes el correo o la contraseña, también cancela.
+Antes de mandar, el programa muestra el asunto, el destinatario y el texto del primer correo que todavía no está en el registro. En cada paso la pregunta muestra `[yes/no]` y solo `yes` confirma. Después pregunta si se envían todos los correos pendientes de la hoja, e indica cuántos son, y otra vez solo `yes` sigue. Si confirmas, pide el correo de Gmail y lo muestra. Después pide la contraseña de aplicación y no la muestra. Cualquier otra respuesta cancela el envío y no manda nada. Si no escribes el correo o la contraseña, también cancela.
 
 Entre un correo y el siguiente el programa espera 2 segundos. Si se corta a la mitad, vuelve a ejecutar el mismo comando: no repite los que ya se enviaron. El registro queda en `sends.db` en esta carpeta. Ese archivo tampoco se sube a GitHub.
 

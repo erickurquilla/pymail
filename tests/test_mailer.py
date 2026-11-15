@@ -577,10 +577,10 @@ ana@example.com,Ana,Física,UES
 beto@example.com,Beto,Bio,UCA
 """
 
-SUBJECT_PROMPT = "Escribe y para confirmar el asunto: "
-RECIPIENT_PROMPT = "Escribe y para confirmar el destinatario: "
-TEXT_PROMPT = "Escribe y para confirmar el texto: "
-ALL_PROMPT = "Escribe y para enviarlos todos: "
+SUBJECT_PROMPT = "¿Confirmas el asunto? [yes/no]: "
+RECIPIENT_PROMPT = "¿Confirmas el destinatario? [yes/no]: "
+TEXT_PROMPT = "¿Confirmas el texto? [yes/no]: "
+ALL_PROMPT = "¿Envías todos los correos pendientes? [yes/no]: "
 TEST_PROMPTS = [SUBJECT_PROMPT, RECIPIENT_PROMPT, TEXT_PROMPT]
 SHEET_PROMPTS = TEST_PROMPTS + [ALL_PROMPT]
 
@@ -648,7 +648,7 @@ def _send(tmp_path: Path, csv_text: str, *extra: str) -> int:
 
 
 def test_to_send_confirms_that_message(monkeypatch, tmp_path, capsys):
-    calls, prompts, pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y"])
+    calls, prompts, pending, password_prompts = _prepare_send(monkeypatch, ["yes", "yes", "yes"])
 
     code = _send(tmp_path, SAMPLE_CSV, "--limit", "1", "--to", "tu@gmail.com")
     captured = capsys.readouterr()
@@ -672,7 +672,7 @@ def test_to_send_confirms_that_message(monkeypatch, tmp_path, capsys):
 
 
 def test_sheet_send_confirms_first_then_everyone(monkeypatch, tmp_path, capsys):
-    calls, prompts, pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, prompts, pending, password_prompts = _prepare_send(monkeypatch, ["yes", "yes", "yes", "yes"])
 
     code = _send(tmp_path, TWO_CSV)
     captured = capsys.readouterr()
@@ -700,7 +700,7 @@ def test_sheet_send_confirms_first_then_everyone(monkeypatch, tmp_path, capsys):
 
 
 def test_sheet_send_with_limit_names_the_limit(monkeypatch, tmp_path, capsys):
-    calls, _prompts, pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, _prompts, pending, password_prompts = _prepare_send(monkeypatch, ["yes", "yes", "yes", "yes"])
 
     code = _send(tmp_path, TWO_CSV, "--limit", "1")
     captured = capsys.readouterr()
@@ -746,7 +746,7 @@ ana@example.com,Ana,Física,UES,boss@example.com
 beto@example.com,Beto,Bio,UCA,
 """,
     )
-    calls, prompts, _pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, prompts, _pending, password_prompts = _prepare_send(monkeypatch, ["yes", "yes", "yes", "yes"])
 
     code = main(
         ["send", str(campaign), "--csv", str(csv_path), "--ledger", str(tmp_path / "sends.db")]
@@ -766,10 +766,11 @@ beto@example.com,Beto,Bio,UCA,
 @pytest.mark.parametrize(
     "answers",
     [
-        ["Y"],
-        ["y", "n"],
-        ["y", "y", ""],
-        ["y", "y", "y", "yes"],
+        ["y"],
+        ["Yes"],
+        ["yes", "no"],
+        ["yes", "yes", ""],
+        ["yes", "yes", "yes", "y"],
     ],
 )
 def test_sheet_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
@@ -789,9 +790,10 @@ def test_sheet_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers)
 @pytest.mark.parametrize(
     "answers",
     [
-        ["n"],
-        ["y", "x"],
-        ["y", "y", "Y"],
+        ["no"],
+        ["y"],
+        ["yes", "x"],
+        ["yes", "yes", "Y"],
     ],
 )
 def test_to_send_cancel_sends_nothing(monkeypatch, tmp_path, capsys, answers):
@@ -881,7 +883,7 @@ afiliacion = "Institucion"
         encoding="utf-8",
     )
     (campaign / "body.txt").write_text("Hola $nombre\n$header_block\n", encoding="utf-8")
-    calls, _prompts, _pending, password_prompts = _prepare_send(monkeypatch, ["y", "y", "y", "y"])
+    calls, _prompts, _pending, password_prompts = _prepare_send(monkeypatch, ["yes", "yes", "yes", "yes"])
 
     code = main(
         [
@@ -897,7 +899,7 @@ afiliacion = "Institucion"
 
     assert code == 1
     assert calls == []
-    assert _pending == ["y", "y", "y", "y"]
+    assert _pending == ["yes", "yes", "yes", "yes"]
     assert ADDRESS_PROMPT not in _prompts
     assert password_prompts == []
     assert "Falta el dato $nombre." in captured.err
@@ -906,7 +908,7 @@ afiliacion = "Institucion"
 def test_send_without_tty_does_not_send(monkeypatch, tmp_path, capsys):
     calls, prompts, pending, password_prompts = _prepare_send(
         monkeypatch,
-        ["y", "y", "y", "y"],
+        ["yes", "yes", "yes", "yes"],
         tty=False,
     )
 
@@ -925,7 +927,7 @@ def test_send_without_tty_does_not_send(monkeypatch, tmp_path, capsys):
 def test_empty_password_cancels(monkeypatch, tmp_path, capsys):
     calls, prompts, pending, password_prompts = _prepare_send(
         monkeypatch,
-        ["y", "y", "y", "y"],
+        ["yes", "yes", "yes", "yes"],
         password="   ",
     )
 
@@ -943,7 +945,7 @@ def test_empty_password_cancels(monkeypatch, tmp_path, capsys):
 def test_password_eof_cancels(monkeypatch, tmp_path, capsys):
     calls, prompts, pending, password_prompts = _prepare_send(
         monkeypatch,
-        ["y", "y", "y", "y"],
+        ["yes", "yes", "yes", "yes"],
     )
 
     def raise_eof(prompt=""):
@@ -966,7 +968,7 @@ def test_password_eof_cancels(monkeypatch, tmp_path, capsys):
 def test_empty_address_cancels_before_password(monkeypatch, tmp_path, capsys):
     calls, prompts, pending, password_prompts = _prepare_send(
         monkeypatch,
-        ["y", "y", "y", "y"],
+        ["yes", "yes", "yes", "yes"],
         address="   ",
     )
 
@@ -984,7 +986,7 @@ def test_empty_address_cancels_before_password(monkeypatch, tmp_path, capsys):
 def test_invalid_address_cancels_before_password(monkeypatch, tmp_path, capsys):
     calls, prompts, pending, password_prompts = _prepare_send(
         monkeypatch,
-        ["y", "y", "y", "y"],
+        ["yes", "yes", "yes", "yes"],
         address="no-es-correo",
     )
 
@@ -1003,7 +1005,7 @@ def test_invalid_address_cancels_before_password(monkeypatch, tmp_path, capsys):
 def test_address_eof_cancels_before_password(monkeypatch, tmp_path, capsys):
     calls, prompts, pending, password_prompts = _prepare_send(
         monkeypatch,
-        ["y", "y", "y", "y"],
+        ["yes", "yes", "yes", "yes"],
         address=None,
     )
 
