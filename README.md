@@ -56,6 +56,8 @@ En la terminal, cada persona se ve así:
 
 ## Otra campaña
 
-Copia la carpeta `campaigns/example`, cambia el `id`, el asunto, la hoja y `body.txt`. El programa arma el HTML a partir de ese texto: una línea en blanco empieza un párrafo, un salto de línea simple se vuelve un salto, y las direcciones web se vuelven enlaces. `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece.
+Copia la carpeta `campaigns/example`, cambia el `id`, el asunto, la hoja y la carta. `body_format` elige el archivo: `txt` lee `body.txt` y arma el HTML; `html` lee `body.html` y arma el texto. Si no está, vale `txt`. El correo lleva las dos versiones, y el programa de correo muestra la que sabe leer. El ejemplo usa `html`. `body.txt` es la misma carta; para enviarla, cambia `body_format` a `txt`.
+
+Con `txt`, una línea en blanco empieza un párrafo, un salto de línea simple se vuelve un salto, y las direcciones web se vuelven enlaces. `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece. En `body.html` va entre bloques, porque el programa lo reemplaza por un párrafo en cursiva.
 
 Para que otras personas reciban copia, pon el nombre de esa columna de la hoja en `cc_columns`. Cada fila copia solo las direcciones de su propia celda. Si no quieres copias, déjalo así: `cc_columns = []`.

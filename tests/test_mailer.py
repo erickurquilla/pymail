@@ -9,7 +9,7 @@ from pymail.campaign import load_campaign
 from pymail.cli import ADDRESS_PROMPT, PASSWORD_PROMPT, main
 from pymail.ledger import Ledger
 from pymail.recipients import Recipient, parse_recipients
-from pymail.render import UnfilledPlaceholder, render_message, text_to_html
+from pymail.render import UnfilledPlaceholder, html_to_text, render_message, text_to_html
 from pymail.smtp_sender import deliver
 
 import pytest
@@ -72,7 +72,7 @@ def test_header_omitted_when_empty():
 
 def test_unfilled_placeholder_refused():
     campaign = load_campaign(CAMPAIGN)
-    broken = replace(campaign, body_txt="Hola $nombre\n$header_block")
+    broken = replace(campaign, body_format="txt", body="Hola $nombre\n$header_block")
     with pytest.raises(UnfilledPlaceholder):
         render_message(broken, {"name": "Ana", "position": "", "afiliacion": ""})
 
@@ -105,7 +105,8 @@ def test_text_to_html_builds_basic_letter():
 def test_generated_html_keeps_italic_header():
     campaign = replace(
         load_campaign(CAMPAIGN),
-        body_txt="Hola,\n\n$header_block\n\nAdiós\n",
+        body_format="txt",
+        body="Hola,\n\n$header_block\n\nAdiós\n",
     )
     html, text = render_message(
         campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
@@ -116,6 +117,212 @@ def test_generated_html_keeps_italic_header():
     assert "<p>Adiós</p>" in html
     assert "$header_block" not in html
     assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
+
+
+def _campaign_dir(tmp_path, *, body_format=None, body=None):
+    directory = tmp_path / "camp"
+    directory.mkdir()
+    lines = [
+        'id = "camp"',
+        'subject = "Hola"',
+        'sheet_id = "x"',
+        'sheet_name = "Sheet1"',
+        'email_column = "Email"',
+    ]
+    if body_format is not None:
+        lines.append(f'body_format = "{body_format}"')
+    lines.extend(
+        [
+            "",
+            "[columns]",
+            'name = "Nombre"',
+            'position = "Carrera"',
+            'afiliacion = "Institucion"',
+            "",
+        ]
+    )
+    (directory / "campaign.toml").write_text("\n".join(lines), encoding="utf-8")
+    if body is not None:
+        (directory / f"body.{body_format or 'txt'}").write_text(body, encoding="utf-8")
+    return directory
+
+
+def test_example_campaign_loads_html():
+    campaign = load_campaign(CAMPAIGN)
+    assert campaign.body_format == "html"
+    assert campaign.body == (CAMPAIGN / "body.html").read_text(encoding="utf-8")
+
+
+def test_omitted_format_reads_txt_and_ignores_html(tmp_path):
+    directory = _campaign_dir(tmp_path, body="Carta\n")
+    (directory / "body.html").write_text("<p>otra</p>\n", encoding="utf-8")
+    campaign = load_campaign(directory)
+    assert campaign.body_format == "txt"
+    assert campaign.body == "Carta\n"
+
+
+def test_load_html_template(tmp_path):
+    directory = _campaign_dir(tmp_path, body_format="html", body="<p>Hola</p>\n")
+    campaign = load_campaign(directory)
+    assert campaign.body_format == "html"
+    assert campaign.body == "<p>Hola</p>\n"
+
+
+def test_body_format_rejected(tmp_path):
+    directory = _campaign_dir(tmp_path, body_format="markdown", body="Hola\n")
+    with pytest.raises(ValueError, match='"txt" o "html"'):
+        load_campaign(directory)
+
+
+@pytest.mark.parametrize("fmt", ["txt", "html"])
+def test_missing_body_file(tmp_path, fmt):
+    directory = _campaign_dir(tmp_path, body_format=fmt)
+    with pytest.raises(ValueError, match=f"No está el archivo body.{fmt}."):
+        load_campaign(directory)
+
+
+def test_text_to_html_escapes_query_ampersand():
+    html = text_to_html("Ver https://example.com?a=1&b=2 ahora")
+    assert '<a href="https://example.com?a=1&amp;b=2">' in html
+    assert "https://example.com?a=1&amp;b=2</a>" in html
+    assert "&amp;amp;" not in html
+
+
+def test_html_to_text_keeps_structure():
+    text = html_to_text(
+        "<html><head><title>OCULTO</title><style>p { color: red }</style></head>"
+        "<body>"
+        "<p>Hola,</p>"
+        "$header_block"
+        "<h1>Título</h1>"
+        "<p>Physics &amp; Astronomy &#243;<br>Fecha l&iacute;mite A&nbsp;B</p>"
+        "<blockquote>Cita</blockquote>"
+        "<div>Bloque</div>"
+        '<p>Enlace: <a href="https://example.com">https://example.com</a></p>'
+        '<p>Formulario: <a href="https://forms.gle/abc">la encuesta</a></p>'
+        '<p>Correo: <a href="mailto:ana@example.com">ana@example.com</a></p>'
+        "<ul><li>Uno</li><li>Dos</li></ul>"
+        "<table><tr><td>Celda</td><td>Otra</td></tr></table>"
+        "<pre>  a  b\nc</pre>"
+        "<script>alert('secreto')</script>"
+        '<p><img alt="Marca" src="x.png"></p>'
+        "<!-- comentario -->"
+        "</body></html>"
+    )
+
+    assert html_to_text("<pre>  a  b\nc</pre>") == "  a  b\nc"
+    assert html_to_text("<p>Uno<br><br>Dos</p>") == "Uno\n\nDos"
+    assert html_to_text("<p>Uno<br><br><br>Dos</p>") == "Uno\n\nDos"
+    assert "$header_block" in text
+    assert "Título" in text
+    assert "Physics & Astronomy ó\nFecha límite A B" in text
+    assert "Cita" in text
+    assert "Bloque" in text
+    assert text.count("https://example.com") == 1
+    assert "la encuesta (https://forms.gle/abc)" in text
+    assert text.count("ana@example.com") == 1
+    assert "mailto:" not in text
+    assert "- Uno\n- Dos" in text
+    assert "Celda Otra" in text
+    assert "  a  b\nc" in text
+    assert "Marca" in text
+    assert "x.png" not in text
+    assert "secreto" not in text
+    assert "OCULTO" not in text
+    assert "comentario" not in text
+    assert "red" not in text
+    assert "<" not in text
+
+
+def test_render_html_source_fills_header():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="html",
+        body="<p>Hola,</p>\n$header_block\n<p>Adiós</p>\n",
+    )
+    html, text = render_message(
+        campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
+    )
+
+    assert html.count("<html>") == 0
+    assert "<p>Hola,</p>" in html
+    assert "<em>Ana<br>" in html
+    assert "<p>Adiós</p>" in html
+    assert "$header_block" not in html
+    assert "$header_block" not in text
+    assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
+
+
+def test_html_source_refuses_unfilled_placeholder():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="html",
+        body="<p>Hola $nombre</p>\n$header_block\n",
+    )
+    with pytest.raises(UnfilledPlaceholder):
+        render_message(campaign, {"name": "Ana", "position": "", "afiliacion": ""})
+
+
+def test_header_escapes_html_only():
+    campaign = load_campaign(CAMPAIGN)
+    html, text = render_message(
+        campaign, {"name": "Ana & Bo <lab>", "position": "", "afiliacion": ""}
+    )
+    assert "Ana &amp; Bo &lt;lab&gt;" in html
+    assert "Ana & Bo <lab>" in text
+    assert "<lab>" not in html
+
+
+def test_message_is_multipart_alternative(tmp_path):
+    fields = {"name": "Ana", "position": "Física", "afiliacion": "UES"}
+    recipient = Recipient("ana@example.com", fields)
+    base = load_campaign(CAMPAIGN)
+    campaigns = [
+        replace(
+            base,
+            delay_seconds=0,
+            body_format="txt",
+            body="Hola Física\n\n$header_block\n",
+        ),
+        replace(
+            base,
+            delay_seconds=0,
+            body_format="html",
+            body="<p>Hola Física</p>\n$header_block\n",
+        ),
+    ]
+    for index, campaign in enumerate(campaigns):
+        ledger = Ledger(tmp_path / f"sends-{index}.db")
+        opened: list[FakeSMTP] = []
+
+        def factory(box=opened):
+            smtp = FakeSMTP()
+            box.append(smtp)
+            return smtp
+
+        deliver(
+            campaign,
+            [recipient],
+            ledger,
+            "from@example.com",
+            "secret",
+            smtp_factory=factory,
+            sleeper=lambda _seconds: None,
+        )
+        message = opened[0].sent[0]
+        assert message.get_content_type() == "multipart/alternative"
+        parts = message.get_payload()
+        assert [part.get_content_type() for part in parts] == [
+            "text/plain",
+            "text/html",
+        ]
+        assert parts[0].get_content_charset() == "utf-8"
+        assert parts[1].get_content_charset() == "utf-8"
+        assert "Física" in parts[0].get_content()
+        assert "Física" in parts[1].get_content()
+        assert "Ana" in parts[0].get_content()
+        assert "<em>Ana<br>" in parts[1].get_content()
+        ledger.close()
 
 
 def test_cc_comes_from_the_row(tmp_path):
