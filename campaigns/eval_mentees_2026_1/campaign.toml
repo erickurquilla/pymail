@@ -1,0 +1,13 @@
+id = "eval_mentees_2026_1"
+subject = "InspiraSTEM 2026: Cuéntanos cómo te fue con tu mentoría (10 min)"
+body_format = "html"
+sheet_id = "https://docs.google.com/spreadsheets/d/1DMcbmrzLUTErmQ53HEFMDUAiebcypitCwC_hgX08eK0/edit?usp=sharing"
+sheet_name = "match_mentor_mentee"
+email_column = "Correo de contacto 3"
+delay_seconds = 2
+cc_columns = []
+
+[columns]
+name = "Nombre del mentee 3"
+position = "Carrera 3"
+afiliacion = "Universidad 3"
