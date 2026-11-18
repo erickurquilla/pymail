@@ -18,6 +18,7 @@ _PUBLISHED_SHEET = re.compile(
 _SHEET_ID_ERROR = (
     "No se pudo leer el id de la hoja. Pega el enlace para editar o solo el id."
 )
+_LINK_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,38 @@ class Campaign:
     body_format: str
     body: str
     directory: Path
+    link_columns: tuple[str, ...] = ()
+
+
+def _parse_link_columns(raw, cc_columns: tuple[str, ...], columns: dict) -> tuple[str, ...]:
+    """Lee link_columns. El nombre de la columna es también el de $placeholder."""
+    if raw is None:
+        return ()
+    if (
+        isinstance(raw, str)
+        or not isinstance(raw, list)
+        or any(not isinstance(item, str) for item in raw)
+    ):
+        raise ValueError("link_columns debe ser una lista de nombres de columna.")
+    names = tuple(item.strip() for item in raw)
+    if len(names) != len(set(names)):
+        raise ValueError("link_columns tiene un nombre repetido.")
+    for name in names:
+        if name == "header_block":
+            raise ValueError("link_columns no puede usar header_block.")
+        if _LINK_NAME.fullmatch(name) is None:
+            raise ValueError(
+                f"link_columns: {name!r} no es un nombre válido. Usa letras, números y _."
+            )
+    cc_overlap = [name for name in names if name in cc_columns]
+    if cc_overlap:
+        listed = ", ".join(repr(name) for name in cc_overlap)
+        raise ValueError(f"link_columns no puede repetir una columna de copia: {listed}.")
+    column_overlap = [name for name in names if name in columns]
+    if column_overlap:
+        listed = ", ".join(repr(name) for name in column_overlap)
+        raise ValueError(f"link_columns no puede usar una clave de columns: {listed}.")
+    return names
 
 
 def sheet_id_from(value: str) -> str:
@@ -60,6 +93,7 @@ def load_campaign(path: str | Path) -> Campaign:
 
     columns = dict(data.get("columns") or {})
     cc_columns = tuple(str(name) for name in (data.get("cc_columns") or []))
+    link_columns = _parse_link_columns(data.get("link_columns"), cc_columns, columns)
     body_format = str(data.get("body_format", "txt"))
     if body_format not in BODY_FORMATS:
         allowed = " o ".join(f'"{name}"' for name in BODY_FORMATS)
@@ -79,6 +113,7 @@ def load_campaign(path: str | Path) -> Campaign:
         body_format=body_format,
         body=body_path.read_text(encoding="utf-8"),
         directory=directory,
+        link_columns=link_columns,
     )
 
 

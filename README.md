@@ -23,13 +23,13 @@ Abre una terminal en esta carpeta y escribe:
     python3 -m venv .venv
     .venv/bin/pip install -e .
 
-En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/example/campaign.toml`. En el ejemplo la pestaña se llama `Sheet1` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`. `sheet_id` puede ser el enlace para editar o solo el id. La pestaña sigue en `sheet_name`.
+En la hoja de Google, Compartir, Cualquier persona con el enlace, Lector. El nombre de la pestaña y las columnas están en `campaigns/example/campaign.toml`. En el ejemplo la pestaña se llama `Sheet1` y las columnas son `Email`, `Nombre`, `Carrera`, `Institucion`, `cced1`, `cced2`, `link1` y `link2`. La carta de ejemplo usa `$link1`. `sheet_id` puede ser el enlace para editar o solo el id. La pestaña sigue en `sheet_name`.
 
 ## Ver la carta sin enviarla
 
     .venv/bin/pymail preview campaigns/example
 
-Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetidos, los que no parecen un email, las primeras cinco personas con su correo, nombre, carrera e institución, y una carta de muestra.
+Esto no manda ningún correo. Muestra cuántas personas hay, los correos repetidos, los que no parecen un email, las primeras cinco personas con su correo, nombre, carrera, institución y enlace, y una carta de muestra.
 
 ## Probar con un solo correo
 
@@ -61,3 +61,5 @@ Copia la carpeta `campaigns/example`, cambia el `id`, el asunto, la hoja y la ca
 Con `txt`, una línea en blanco empieza un párrafo, un salto de línea simple se vuelve un salto, y las direcciones web se vuelven enlaces. `$header_block` es el lugar del nombre, la carrera y la institución. Si los tres están vacíos, ese bloque no aparece. En `body.html` va entre bloques, porque el programa lo reemplaza por un párrafo en cursiva.
 
 Para que otras personas reciban copia, pon el nombre de esa columna de la hoja en `cc_columns`. Cada fila copia solo las direcciones de su propia celda. Si no quieres copias, déjalo así: `cc_columns = []`.
+
+Para un enlace distinto por persona, pon esas columnas en `link_columns`, por ejemplo `link_columns = ["link1", "link2"]`. En la carta, `$link1` se reemplaza con la celda de esa fila. En `body.html` escríbelo así: `<a href="$link1">$link1</a>`. En `body.txt` basta `$link1`; el programa arma el enlace. El nombre de la columna tiene que servir como `$nombre`: letras, números y `_`. Si la carta usa un enlace y esa celda está vacía, el envío se detiene. La campaña de ejemplo ya usa `link1`. Si no quieres enlaces personalizados, déjalo así: `link_columns = []`.

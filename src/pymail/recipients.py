@@ -20,6 +20,7 @@ class Recipient:
     email: str
     fields: dict[str, str]
     cc: tuple[str, ...] = ()
+    links: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -68,6 +69,10 @@ def parse_recipients(csv_text: str, campaign: Campaign) -> RecipientReport:
     if missing_cc:
         names = ", ".join(repr(name) for name in missing_cc)
         raise ValueError(f"La hoja no tiene la columna de copia {names}.")
+    missing_links = [name for name in campaign.link_columns if name not in reader.fieldnames]
+    if missing_links:
+        names = ", ".join(repr(name) for name in missing_links)
+        raise ValueError(f"La hoja no tiene la columna de enlace {names}.")
 
     report = RecipientReport()
     seen: set[str] = set()
@@ -88,8 +93,17 @@ def parse_recipients(csv_text: str, campaign: Campaign) -> RecipientReport:
             logical: (row.get(column) or "").strip()
             for logical, column in campaign.columns.items()
         }
+        links = {
+            name: (row.get(name) or "").strip()
+            for name in campaign.link_columns
+        }
         report.recipients.append(
-            Recipient(email=raw, fields=fields, cc=_cc_addresses(row, campaign, report))
+            Recipient(
+                email=raw,
+                fields=fields,
+                cc=_cc_addresses(row, campaign, report),
+                links=links,
+            )
         )
     return report
 

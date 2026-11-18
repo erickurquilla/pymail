@@ -119,6 +119,11 @@ def print_preview_rows(campaign, recipients) -> None:
             line = f"{line} | {fields}"
         if recipient.cc:
             line = f"{line} | cc: {', '.join(recipient.cc)}"
+        if campaign.link_columns and recipient.links:
+            rendered_links = " | ".join(
+                f"{key}: {recipient.links.get(key, '')}" for key in campaign.link_columns
+            )
+            line = f"{line} | {rendered_links}"
         print(line)
 
 
@@ -148,7 +153,7 @@ def preview(campaign, report) -> int:
     print_preview_rows(campaign, report.recipients)
     sample = report.recipients[0]
     try:
-        html, text = render_message(campaign, sample.fields)
+        html, text = render_message(campaign, sample.fields, sample.links)
     except UnfilledPlaceholder as exc:
         print(str(exc), file=sys.stderr)
         return 1

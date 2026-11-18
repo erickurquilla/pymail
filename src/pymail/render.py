@@ -1,6 +1,6 @@
 """Arma el texto y el HTML de una carta a partir de los datos de una fila."""
 
-from html import unescape
+from html import escape, unescape
 from html.parser import HTMLParser
 from string import Template
 import re
@@ -15,6 +15,10 @@ class UnfilledPlaceholder(ValueError):
 _LEFTOVER = re.compile(
     r"(?<!\$)\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)"
 )
+# Un $$ escapado, o un $ que viene dentro del enlace, no se vuelve a leer
+# como placeholder cuando después se inserta $header_block.
+_DOLLAR = "\x00"
+_HEADER_TOKEN = re.compile(r"\$\{header_block\}|\$header_block(?![A-Za-z0-9_])")
 _LINK = re.compile(
     r"https?://[^\s<>]+"
     r"|"
@@ -373,7 +377,71 @@ def _fill(template: str, header: str) -> str:
     return rendered
 
 
-def render_message(campaign: Campaign, fields: dict) -> tuple[str, str]:
+def _apply_links(
+    template: str,
+    links: dict[str, str],
+    allowed: tuple[str, ...],
+    *,
+    html: bool,
+) -> str:
+    """Sustituye $enlaces y deja $header_block para el paso siguiente."""
+    known = set(allowed)
+
+    def convert(match: re.Match) -> str:
+        name = match.group("named") or match.group("braced")
+        if match.group("escaped") is not None:
+            return _DOLLAR
+        if name is None:
+            raise ValueError(f"Invalid placeholder in string: {match.group(0)!r}")
+        if name == "header_block":
+            return match.group(0)
+        if name not in known:
+            raise UnfilledPlaceholder(f"Falta el dato ${name}.")
+        value = str(links.get(name, "")).strip()
+        if not value:
+            raise UnfilledPlaceholder(f"El dato ${name} está vacío.")
+        if html:
+            value = escape(value, quote=True)
+        return value.replace("$", _DOLLAR)
+
+    return Template.pattern.sub(convert, template)
+
+
+def _finish(template: str, header: str) -> str:
+    leftover = _LEFTOVER.search(header)
+    if leftover:
+        raise UnfilledPlaceholder(f"Quedó sin llenar {leftover.group(0)}.")
+    rendered = _HEADER_TOKEN.sub(lambda _match: header, template)
+    return rendered.replace(_DOLLAR, "$")
+
+
+def _render_linked(campaign: Campaign, fields: dict, links: dict[str, str]) -> tuple[str, str]:
+    allowed = campaign.link_columns
+    if campaign.body_format == "html":
+        html_template = _apply_links(campaign.body, links, allowed, html=True)
+        text_template = _apply_links(
+            html_to_text(campaign.body), links, allowed, html=False
+        )
+    elif campaign.body_format == "txt":
+        linked = _apply_links(campaign.body, links, allowed, html=False)
+        html_template = text_to_html(linked)
+        text_template = linked
+    else:
+        raise ValueError(
+            f'body_format debe ser "txt" o "html", no {campaign.body_format!r}.'
+        )
+    html = _finish(html_template, build_header_block(fields))
+    text = _finish(text_template, build_header_text(fields))
+    return html, text
+
+
+def render_message(
+    campaign: Campaign,
+    fields: dict,
+    links: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    if campaign.link_columns:
+        return _render_linked(campaign, fields, links or {})
     if campaign.body_format == "html":
         html_template = campaign.body
         text_template = html_to_text(campaign.body)

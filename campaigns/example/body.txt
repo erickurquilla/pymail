@@ -5,6 +5,6 @@ $header_block
 This is an example message. Replace this text with the letter you want to send.
 
 The link below is a placeholder:
-https://example.com
+$link1
 
 Example team

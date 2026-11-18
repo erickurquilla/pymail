@@ -44,7 +44,7 @@ def select_pending(
 
 
 def build_outbound(campaign: Campaign, recipient: Recipient, to_address: str | None = None) -> Outbound:
-    html, text = render_message(campaign, recipient.fields)
+    html, text = render_message(campaign, recipient.fields, recipient.links)
     return Outbound(
         email=to_address or recipient.email,
         name=(recipient.fields.get("name") or "").strip(),

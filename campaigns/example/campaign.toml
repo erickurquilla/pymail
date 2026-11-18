@@ -1,11 +1,12 @@
 id = "example"
 subject = "Example message"
 body_format = "html"
-sheet_id = "example-sheet-id"
+sheet_id = "example-sheet-id_or_url"
 sheet_name = "Sheet1"
 email_column = "Email"
 delay_seconds = 2
-cc_columns = []
+cc_columns = ['cced1', 'cced2']
+link_columns = ['link1', 'link2']
 
 [columns]
 name = "Nombre"

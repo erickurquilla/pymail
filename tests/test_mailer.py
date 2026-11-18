@@ -18,11 +18,11 @@ import pytest
 CAMPAIGN = Path("campaigns/example")
 
 SAMPLE_CSV = """\
-Email,Nombre,Carrera,Institucion
-ana@example.com,Ana,Física,UES
-ana@example.com,Ana Otra,Química,UCA
-bad-email,Beto,Bio,UES
-,Sin correo,Mate,UES
+Email,Nombre,Carrera,Institucion,cced1,cced2,link1,link2
+ana@example.com,Ana,Física,UES,,,https://example.com,https://example.com/two
+ana@example.com,Ana Otra,Química,UCA,,,https://example.com/otra,https://example.com/two
+bad-email,Beto,Bio,UES,,,https://example.com/beto,https://example.com/two
+,Sin correo,Mate,UES,,,https://example.com/mate,https://example.com/two
 """
 
 
@@ -55,16 +55,18 @@ def _csv(tmp_path: Path) -> Path:
 
 def test_header_omitted_when_empty():
     campaign = load_campaign(CAMPAIGN)
+    links = {"link1": "https://example.com"}
     html, text = render_message(
-        campaign, {"name": "", "position": " ", "afiliacion": None}
+        campaign, {"name": "", "position": " ", "afiliacion": None}, links
     )
     assert "<em>" not in html
     assert "$header_block" not in html
     assert "$header_block" not in text
-    assert "https://example.com" in html
+    assert "$link1" not in html
+    assert 'href="https://example.com"' in html
 
     html, text = render_message(
-        campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
+        campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}, links
     )
     assert "<em>Ana<br>" in html
     assert "Ana\nFísica\nUES" in text
@@ -119,7 +121,15 @@ def test_generated_html_keeps_italic_header():
     assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
 
 
-def _campaign_dir(tmp_path, *, body_format=None, body=None, sheet_id="x"):
+def _campaign_dir(
+    tmp_path,
+    *,
+    body_format=None,
+    body=None,
+    sheet_id="x",
+    cc_columns=None,
+    link_columns=None,
+):
     directory = tmp_path / "camp"
     directory.mkdir()
     lines = [
@@ -131,6 +141,10 @@ def _campaign_dir(tmp_path, *, body_format=None, body=None, sheet_id="x"):
     ]
     if body_format is not None:
         lines.append(f'body_format = "{body_format}"')
+    if cc_columns is not None:
+        lines.append(f"cc_columns = {cc_columns}")
+    if link_columns is not None:
+        lines.append(f"link_columns = {link_columns}")
     lines.extend(
         [
             "",
@@ -308,7 +322,9 @@ def test_html_source_refuses_unfilled_placeholder():
 def test_header_escapes_html_only():
     campaign = load_campaign(CAMPAIGN)
     html, text = render_message(
-        campaign, {"name": "Ana & Bo <lab>", "position": "", "afiliacion": ""}
+        campaign,
+        {"name": "Ana & Bo <lab>", "position": "", "afiliacion": ""},
+        {"link1": "https://example.com"},
     )
     assert "Ana &amp; Bo &lt;lab&gt;" in html
     assert "Ana & Bo <lab>" in text
@@ -371,9 +387,9 @@ def test_cc_comes_from_the_row(tmp_path):
     campaign = replace(load_campaign(CAMPAIGN), delay_seconds=0, cc_columns=("Copia",))
     report = parse_recipients(
         """\
-Email,Nombre,Carrera,Institucion,Copia
-ana@example.com,Ana,Física,UES,"boss@example.com, not-an-email"
-beto@example.com,Beto,Bio,UCA,
+Email,Nombre,Carrera,Institucion,Copia,link1,link2
+ana@example.com,Ana,Física,UES,"boss@example.com, not-an-email",https://example.com,https://example.com/two
+beto@example.com,Beto,Bio,UCA,,https://example.com/beto,https://example.com/two
 """,
         campaign,
     )
@@ -426,6 +442,7 @@ def test_to_address_excludes_cc(tmp_path):
             "ana@example.com",
             {"name": "Ana", "position": "Física", "afiliacion": "UES"},
             cc=("copia@example.com",),
+            links={"link1": "https://example.com"},
         )
     ]
     opened: list[FakeSMTP] = []
@@ -476,6 +493,7 @@ def test_to_address_sends_when_everyone_is_recorded(tmp_path):
         Recipient(
             "ana@example.com",
             {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+            links={"link1": "https://example.com"},
         )
     ]
     opened: list[FakeSMTP] = []
@@ -511,6 +529,7 @@ def test_second_send_is_skipped(tmp_path):
         Recipient(
             "ana@example.com",
             {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+            links={"link1": "https://example.com"},
         )
     ]
     opened: list[FakeSMTP] = []
@@ -566,15 +585,19 @@ def test_preview_sends_nothing(monkeypatch, tmp_path, capsys):
     assert "Inválidos: 1" in captured.out
     assert "bad-email" in captured.out
     assert "Primeros 5:" in captured.out
-    assert "1. ana@example.com | name: Ana | position: Física | afiliacion: UES" in captured.out
+    assert (
+        "1. ana@example.com | name: Ana | position: Física | afiliacion: UES"
+        " | link1: https://example.com | link2: https://example.com/two"
+        in captured.out
+    )
     assert "Muestra para ana@example.com" in captured.out
     assert "https://example.com" in captured.out
 
 
 TWO_CSV = """\
-Email,Nombre,Carrera,Institucion
-ana@example.com,Ana,Física,UES
-beto@example.com,Beto,Bio,UCA
+Email,Nombre,Carrera,Institucion,cced1,cced2,link1,link2
+ana@example.com,Ana,Física,UES,,,https://example.com,https://example.com/two
+beto@example.com,Beto,Bio,UCA,,,https://example.com/beto,https://example.com/two
 """
 
 SUBJECT_PROMPT = "¿Confirmas el asunto? [yes/no]: "
@@ -1018,3 +1041,362 @@ def test_address_eof_cancels_before_password(monkeypatch, tmp_path, capsys):
     assert pending == []
     assert password_prompts == []
     assert "Envío cancelado. No se envió ningún correo." in captured.err
+
+
+def test_example_fills_link1():
+    campaign = load_campaign(CAMPAIGN)
+    assert campaign.link_columns == ("link1", "link2")
+    html, text = render_message(
+        campaign,
+        {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        {"link1": "https://example.com/ana"},
+    )
+    assert 'href="https://example.com/ana"' in html
+    assert "https://example.com/ana" in text
+    assert "$link1" not in html
+    assert "$link1" not in text
+    assert "<em>Ana<br>" in html
+    assert "Ana\nFísica\nUES" in text
+    assert "$header_block" not in html
+    assert "$header_block" not in text
+
+
+def test_omitted_link_columns_defaults_empty(tmp_path):
+    directory = _campaign_dir(tmp_path, body="Hola,\n\n$header_block\n\nAdiós\n")
+    campaign = load_campaign(directory)
+    assert campaign.link_columns == ()
+    html, text = render_message(
+        campaign, {"name": "Ana", "position": "Física", "afiliacion": "UES"}
+    )
+    assert "<p>Hola,</p>" in html
+    assert "<em>Ana<br>" in html
+    assert "<p>Adiós</p>" in html
+    assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
+
+
+@pytest.mark.parametrize(
+    ("link_columns", "cc_columns", "match"),
+    [
+        ('["link 1"]', None, "no es un nombre válido"),
+        ('["año"]', None, "no es un nombre válido"),
+        ('["header_block"]', None, "no puede usar header_block"),
+        ('["link1", "link1"]', None, "nombre repetido"),
+        ('["link1"]', '["link1"]', "columna de copia"),
+        ('["name"]', None, "clave de columns"),
+        ('"link1"', None, "lista de nombres"),
+    ],
+)
+def test_link_columns_rejected(tmp_path, link_columns, cc_columns, match):
+    directory = _campaign_dir(
+        tmp_path,
+        body="Hola\n",
+        link_columns=link_columns,
+        cc_columns=cc_columns,
+    )
+    with pytest.raises(ValueError, match=match):
+        load_campaign(directory)
+
+
+def test_missing_link_column(tmp_path):
+    directory = _campaign_dir(
+        tmp_path,
+        body="Hola $link1\n",
+        link_columns='["link1"]',
+    )
+    campaign = load_campaign(directory)
+    with pytest.raises(ValueError, match="columna de enlace 'link1'"):
+        parse_recipients(
+            "Email,Nombre,Carrera,Institucion\nana@example.com,Ana,Física,UES\n",
+            campaign,
+        )
+
+
+def test_links_do_not_become_cc(tmp_path):
+    directory = _campaign_dir(
+        tmp_path,
+        body="Ver $link1\n",
+        link_columns='["link1"]',
+        cc_columns='["Copia"]',
+    )
+    campaign = load_campaign(directory)
+    report = parse_recipients(
+        """\
+Email,Nombre,Carrera,Institucion,Copia,link1
+ana@example.com,Ana,Física,UES,"boss@example.com, not-an-email",https://example.com/ana
+""",
+        campaign,
+    )
+    assert report.recipients[0].cc == ("boss@example.com",)
+    assert report.invalid_cc == ["not-an-email"]
+    assert report.recipients[0].links == {"link1": "https://example.com/ana"}
+
+
+def test_txt_links_are_personalized(tmp_path):
+    directory = _campaign_dir(
+        tmp_path,
+        body_format="txt",
+        link_columns='[" link1 ", "link2"]',
+        body=(
+            "Hello,\n\n"
+            "$header_block\n\n"
+            "Your form: $link1\n"
+            "Details: $link2\n"
+        ),
+    )
+    campaign = load_campaign(directory)
+    assert campaign.link_columns == ("link1", "link2")
+    report = parse_recipients(
+        """\
+Email,Nombre,Carrera,Institucion,link1,link2
+ana@example.com,Ana,Física,UES,https://forms.gle/aaa?x=1&y=2, https://example.com/ana 
+beto@example.com,Beto,Bio,UCA,https://forms.gle/bbb,https://example.com/beto
+""",
+        campaign,
+    )
+    html, text = render_message(
+        campaign, report.recipients[0].fields, report.recipients[0].links
+    )
+    assert report.recipients[0].links["link2"] == "https://example.com/ana"
+    assert "https://forms.gle/aaa?x=1&y=2" in text
+    assert "https://example.com/ana" in text
+    assert "https://example.com/beto" not in text
+    assert '<a href="https://forms.gle/aaa?x=1&amp;y=2">' in html
+    assert "https://forms.gle/aaa?x=1&amp;y=2</a>" in html
+    assert "&amp;amp;" not in html
+    assert "Ana\nFísica\nUES" in text
+    assert "<em>Ana<br>" in html
+    assert "$header_block" not in html
+    assert "$link1" not in text
+
+    _html_b, text_b = render_message(
+        campaign, report.recipients[1].fields, report.recipients[1].links
+    )
+    assert "https://forms.gle/bbb" in text_b
+    assert "https://example.com/beto" in text_b
+    assert "https://example.com/ana" not in text_b
+    assert "Beto\nBio\nUCA" in text_b
+
+
+def test_html_links_are_escaped():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="html",
+        body=(
+            "<p>Hello,</p>\n"
+            "$header_block\n"
+            '<p>Your form: <a href="$link1">$link1</a></p>\n'
+            '<p>Details: <a href="${link2}">${link2}</a></p>\n'
+        ),
+        link_columns=("link1", "link2"),
+    )
+    html, text = render_message(
+        campaign,
+        {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        {
+            "link1": "https://forms.gle/aaa?x=1&y=2",
+            "link2": 'https://example.com/a"b',
+        },
+    )
+    assert 'href="https://forms.gle/aaa?x=1&amp;y=2"' in html
+    assert 'href="https://example.com/a&quot;b"' in html
+    assert "https://forms.gle/aaa?x=1&y=2" in text
+    assert 'https://example.com/a"b' in text
+    assert "&quot;" not in text
+    assert "&amp;" not in text
+    assert "Ana\nFísica\nUES" in text
+    assert "<em>Ana<br>" in html
+    assert "$link1" not in html
+    assert "${link2}" not in text
+
+    _html_b, text_b = render_message(
+        campaign,
+        {"name": "Beto", "position": "Bio", "afiliacion": "UCA"},
+        {"link1": "https://forms.gle/bbb", "link2": "https://example.com/beto"},
+    )
+    assert "https://forms.gle/bbb" in text_b
+    assert "https://example.com/beto" in text_b
+    assert 'https://example.com/a"b' not in text_b
+
+
+def test_link_values_keep_literal_dollars():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="txt",
+        body="Precio $$5 y $link1\n\n$header_block\n",
+        link_columns=("link1",),
+    )
+    html, text = render_message(
+        campaign,
+        {"name": "Ana", "position": "", "afiliacion": ""},
+        {"link1": "https://example.com/$foo"},
+    )
+    assert "Precio $5 y https://example.com/$foo" in text
+    assert "https://example.com/$foo" in html
+    assert "$link1" not in text
+
+
+def test_unused_link_column_may_be_blank():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="txt",
+        body="Hola,\n\n$header_block\n\nAdiós\n",
+        link_columns=("link2",),
+    )
+    html, text = render_message(
+        campaign,
+        {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        {"link2": "  "},
+    )
+    assert "<p>Hola,</p>" in html
+    assert "<em>Ana<br>" in html
+    assert "<p>Adiós</p>" in html
+    assert "Hola,\n\nAna\nFísica\nUES\n\nAdiós" in text
+
+
+def test_unknown_placeholder_with_link_columns():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="txt",
+        body="Hola $nombre\n$header_block\n",
+        link_columns=("link1",),
+    )
+    with pytest.raises(UnfilledPlaceholder, match=r"Falta el dato \$nombre"):
+        render_message(
+            campaign,
+            {"name": "Ana", "position": "", "afiliacion": ""},
+            {"link1": "https://example.com"},
+        )
+
+
+def test_header_placeholder_still_refused_with_links():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="txt",
+        body="Hola $link1\n\n$header_block\n",
+        link_columns=("link1",),
+    )
+    with pytest.raises(UnfilledPlaceholder, match="sin llenar"):
+        render_message(
+            campaign,
+            {"name": "Ana $extra", "position": "", "afiliacion": ""},
+            {"link1": "https://example.com"},
+        )
+
+
+def test_blank_referenced_link_is_refused():
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        body_format="html",
+        body='<p><a href="$link1">$link1</a></p>\n$header_block\n',
+        link_columns=("link1",),
+    )
+    with pytest.raises(UnfilledPlaceholder, match=r"El dato \$link1 está vacío"):
+        render_message(
+            campaign,
+            {"name": "Ana", "position": "", "afiliacion": ""},
+            {"link1": "  "},
+        )
+
+
+def test_personalized_links_reach_the_message(tmp_path):
+    campaign = replace(
+        load_campaign(CAMPAIGN),
+        delay_seconds=0,
+        body_format="txt",
+        body="Formulario: $link1\n\n$header_block\n",
+        link_columns=("link1",),
+    )
+    recipient = Recipient(
+        "ana@example.com",
+        {"name": "Ana", "position": "Física", "afiliacion": "UES"},
+        links={"link1": "https://forms.gle/aaa?x=1&y=2"},
+    )
+    ledger = Ledger(tmp_path / "sends.db")
+    opened: list[FakeSMTP] = []
+
+    def factory():
+        smtp = FakeSMTP()
+        opened.append(smtp)
+        return smtp
+
+    deliver(
+        campaign,
+        [recipient],
+        ledger,
+        "from@example.com",
+        "secret",
+        smtp_factory=factory,
+        sleeper=lambda _seconds: None,
+    )
+    parts = opened[0].sent[0].get_payload()
+    assert "https://forms.gle/aaa?x=1&y=2" in parts[0].get_content()
+    assert '<a href="https://forms.gle/aaa?x=1&amp;y=2">' in parts[1].get_content()
+    assert "<em>Ana<br>" in parts[1].get_content()
+    ledger.close()
+
+
+def test_preview_shows_link_columns(monkeypatch, tmp_path, capsys):
+    directory = _campaign_dir(
+        tmp_path,
+        body="Your form: $link1\n\n$header_block\n",
+        link_columns='["link1", "link2"]',
+    )
+    csv_path = _write_csv(
+        tmp_path,
+        """\
+Email,Nombre,Carrera,Institucion,link1,link2
+ana@example.com,Ana,Física,UES,https://example.com/ana,https://example.com/extra
+""",
+    )
+
+    def fail_deliver(*args, **kwargs):
+        raise AssertionError("preview envió")
+
+    monkeypatch.setattr("pymail.cli.deliver", fail_deliver)
+    code = main(["preview", str(directory), "--csv", str(csv_path)])
+    captured = capsys.readouterr()
+
+    assert code == 0
+    assert (
+        "1. ana@example.com | name: Ana | position: Física | afiliacion: UES"
+        " | link1: https://example.com/ana | link2: https://example.com/extra"
+        in captured.out
+    )
+    assert '<a href="https://example.com/ana">' in captured.out
+
+
+def test_blank_link_stops_send(monkeypatch, tmp_path, capsys):
+    directory = _campaign_dir(
+        tmp_path,
+        body="Ver $link1\n$header_block\n",
+        link_columns='["link1"]',
+    )
+    csv_path = _write_csv(
+        tmp_path,
+        """\
+Email,Nombre,Carrera,Institucion,link1
+ana@example.com,Ana,Física,UES,
+""",
+    )
+    calls, prompts, pending, password_prompts = _prepare_send(
+        monkeypatch, ["yes", "yes", "yes", "yes"]
+    )
+
+    code = main(
+        [
+            "send",
+            str(directory),
+            "--csv",
+            str(csv_path),
+            "--ledger",
+            str(tmp_path / "sends.db"),
+        ]
+    )
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert calls == []
+    assert prompts == []
+    assert pending == ["yes", "yes", "yes", "yes"]
+    assert password_prompts == []
+    assert "El dato $link1 está vacío." in captured.err
