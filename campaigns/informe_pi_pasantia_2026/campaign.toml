@@ -1,0 +1,14 @@
+id = "informe_pi_pasantia_2026"
+subject = "Gracias por ser parte de la investigación de InspiraSTEM 2026: reporte de pasantías e invitación a conversar"
+body_format = "txt"
+sheet_id = "https://docs.google.com/spreadsheets/d/1gNMq4y3ucufX1pBRv5gYBBIWxJCTYBOFQW1l6WiGhYk/edit?usp=sharing"
+sheet_name = "pi"
+email_column = "email"
+delay_seconds = 2
+cc_columns = ["cced1"]
+link_columns = ["link_reporte_2026"]
+
+[columns]
+name = "nombre"
+position = "cargo"
+afiliacion = "universidad"
